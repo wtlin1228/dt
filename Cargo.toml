@@ -1,0 +1,14 @@
+[package]
+name = "dependency-tracker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+swc_core = { version = "0.91", features = [
+    "common", 
+    "ecma_ast", 
+    "ecma_visit",
+    "ecma_plugin_transform"
+]}
+swc_ecma_parser = { version = "0.144", features = ["typescript"] }
+anyhow = "1"
