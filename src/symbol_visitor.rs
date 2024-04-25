@@ -1,5 +1,5 @@
 use super::{
-    types::{FromOtherModule, ModuleExport, ModuleScopedVariable},
+    types::{FromOtherModule, FromType, ModuleExport, ModuleScopedVariable},
     SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
 };
 
@@ -60,6 +60,30 @@ impl ModuleSymbolVisitor {
         self.tracked_ids.insert(id);
     }
 
+    fn add_re_exporting_all_from(&mut self, from: String) {
+        self.re_exporting_all_from.push(from);
+    }
+
+    fn add_re_exporting_all_as_namespace_from(
+        &mut self,
+        namespace_ident: &ast::Ident,
+        from: String,
+    ) {
+        assert_eq!(
+            self.named_export_table
+                .contains_key(namespace_ident.to_symbol_name().as_str()),
+            false,
+            "module can't export the same name twice"
+        );
+        self.named_export_table.insert(
+            namespace_ident.to_symbol_name(),
+            ModuleExport::ReExportFrom(FromOtherModule {
+                from,
+                from_type: FromType::Namespace,
+            }),
+        );
+    }
+
     fn add_module_scoped_variable(
         &mut self,
         ident: &ast::Ident,
@@ -85,6 +109,27 @@ impl ModuleSymbolVisitor {
         self.named_export_table.insert(
             export_ident.to_symbol_name(),
             ModuleExport::Local(local_var_ident.to_symbol_name()),
+        );
+    }
+
+    fn named_export_from_other_module(
+        &mut self,
+        export_ident: &ast::Ident,
+        original_ident: &ast::Ident,
+        from: String,
+    ) {
+        assert_eq!(
+            self.named_export_table
+                .contains_key(export_ident.to_symbol_name().as_str()),
+            false,
+            "module can't export the same name twice"
+        );
+        self.named_export_table.insert(
+            export_ident.to_symbol_name(),
+            ModuleExport::ReExportFrom(FromOtherModule {
+                from,
+                from_type: FromType::Named(original_ident.to_symbol_name()),
+            }),
         );
     }
 
@@ -145,41 +190,123 @@ impl Visit for ModuleSymbolVisitor {
                         ast::Decl::TsEnum(_) => (),
                         ast::Decl::TsModule(_) => (),
                     },
-                    ast::ModuleDecl::ExportNamed(ast::NamedExport { specifiers, .. }) => {
-                        for specifier in specifiers.iter() {
-                            match specifier {
-                                ast::ExportSpecifier::Namespace(_) => todo!(),
-                                ast::ExportSpecifier::Default(_) => todo!(),
-                                ast::ExportSpecifier::Named(ast::ExportNamedSpecifier {
-                                    orig,
-                                    exported,
-                                    ..
-                                }) => {
-                                    match (orig, exported) {
-                                        // export { name1, /* …, */ nameN };
-                                        (ast::ModuleExportName::Ident(ident), None) => {
-                                            self.named_export_local_var(ident, ident);
-                                        }
-                                        // export { variable1 as name1, variable2 as name2, /* …, */ variableN as nameN };
-                                        // export { name1 as default /*, … */ };
-                                        (
-                                            ast::ModuleExportName::Ident(orig_ident),
-                                            Some(ast::ModuleExportName::Ident(export_ident)),
-                                        ) => {
-                                            match export_ident.to_symbol_name().as_str() {
-                                                "default" => {
-                                                    self.set_default_export(ModuleExport::Local(
-                                                        orig_ident.to_symbol_name(),
-                                                    ))
+                    ast::ModuleDecl::ExportNamed(ast::NamedExport {
+                        specifiers, src, ..
+                    }) => {
+                        match src {
+                            Some(src) => {
+                                let import_from_path = &src.value;
+                                for specifier in specifiers.iter() {
+                                    match specifier {
+                                        // export * as name1 from 'module-name';
+                                        ast::ExportSpecifier::Namespace(
+                                            ast::ExportNamespaceSpecifier { name, .. },
+                                        ) => match name {
+                                            ast::ModuleExportName::Ident(namespace_ident) => self
+                                                .add_re_exporting_all_as_namespace_from(
+                                                    namespace_ident,
+                                                    import_from_path.to_string(),
+                                                ),
+                                            ast::ModuleExportName::Str(_) => todo!(),
+                                        },
+                                        ast::ExportSpecifier::Default(_) => todo!(),
+                                        ast::ExportSpecifier::Named(
+                                            ast::ExportNamedSpecifier { orig, exported, .. },
+                                        ) => match (orig, exported) {
+                                            // export { name1, /* …, */ nameN } from 'module-name';
+                                            // export { default, /* …, */ } from 'module-name';
+                                            (ast::ModuleExportName::Ident(ident), None) => {
+                                                match ident.to_symbol_name().as_str() {
+                                                    "default" => {
+                                                        assert!(self.default_export.is_none());
+                                                        self.default_export =
+                                                            Some(ModuleExport::ReExportFrom(
+                                                                FromOtherModule {
+                                                                    from: import_from_path
+                                                                        .to_string(),
+                                                                    from_type: FromType::Default,
+                                                                },
+                                                            ))
+                                                    }
+                                                    _ => self.named_export_from_other_module(
+                                                        ident,
+                                                        ident,
+                                                        import_from_path.to_string(),
+                                                    ),
                                                 }
-                                                _ => self.named_export_local_var(
+                                            }
+                                            // export { import1 as name1, import2 as name2, /* …, */ importN as nameN } from 'module-name';
+                                            // export { default as name1 } from 'module-name';
+                                            (
+                                                ast::ModuleExportName::Ident(orig_ident),
+                                                Some(ast::ModuleExportName::Ident(export_ident)),
+                                            ) => match orig_ident.to_symbol_name().as_str() {
+                                                "default" => {
+                                                    assert_eq!(
+                                                        self.named_export_table.contains_key(
+                                                            export_ident.to_symbol_name().as_str()
+                                                        ),
+                                                        false,
+                                                        "module can't export the same name twice"
+                                                    );
+                                                    self.named_export_table.insert(
+                                                        export_ident.to_symbol_name(),
+                                                        ModuleExport::ReExportFrom(
+                                                            FromOtherModule {
+                                                                from: import_from_path.to_string(),
+                                                                from_type: FromType::Default,
+                                                            },
+                                                        ),
+                                                    );
+                                                }
+                                                _ => self.named_export_from_other_module(
                                                     export_ident,
                                                     orig_ident,
+                                                    import_from_path.to_string(),
                                                 ),
-                                            };
+                                            },
+                                            (_, _) => (),
+                                        },
+                                    }
+                                }
+                            }
+                            None => {
+                                for specifier in specifiers.iter() {
+                                    match specifier {
+                                        ast::ExportSpecifier::Namespace(_) => todo!(),
+                                        ast::ExportSpecifier::Default(_) => todo!(),
+                                        ast::ExportSpecifier::Named(
+                                            ast::ExportNamedSpecifier { orig, exported, .. },
+                                        ) => {
+                                            match (orig, exported) {
+                                                // export { name1, /* …, */ nameN };
+                                                (ast::ModuleExportName::Ident(ident), None) => {
+                                                    self.named_export_local_var(ident, ident);
+                                                }
+                                                // export { variable1 as name1, variable2 as name2, /* …, */ variableN as nameN };
+                                                // export { name1 as default /*, … */ };
+                                                (
+                                                    ast::ModuleExportName::Ident(orig_ident),
+                                                    Some(ast::ModuleExportName::Ident(
+                                                        export_ident,
+                                                    )),
+                                                ) => {
+                                                    match export_ident.to_symbol_name().as_str() {
+                                                        "default" => self.set_default_export(
+                                                            ModuleExport::Local(
+                                                                orig_ident.to_symbol_name(),
+                                                            ),
+                                                        ),
+                                                        _ => self.named_export_local_var(
+                                                            export_ident,
+                                                            orig_ident,
+                                                        ),
+                                                    };
+                                                }
+                                                // [Not Support Yet] export { variable1 as 'string name' };
+                                                (_, _) => todo!(),
+                                            }
                                         }
-                                        // export { variable1 as 'string name' };
-                                        (_, _) => todo!(),
                                     }
                                 }
                             }
@@ -250,7 +377,9 @@ impl Visit for ModuleSymbolVisitor {
                             _ => (),
                         }
                     }
-                    ast::ModuleDecl::ExportAll(_) => todo!(),
+                    ast::ModuleDecl::ExportAll(ast::ExportAll { src, .. }) => {
+                        self.add_re_exporting_all_from(src.value.to_string());
+                    }
                     ast::ModuleDecl::TsImportEquals(_) => (),
                     ast::ModuleDecl::TsExportAssignment(_) => (),
                     ast::ModuleDecl::TsNamespaceExport(_) => (),
@@ -380,7 +509,7 @@ mod tests {
             r#"export * from 'module-name';"#,
             r#"export * as name1 from 'module-name';"#,
             r#"export { name1, /* …, */ nameN } from 'module-name';"#,
-            r#"export { import1 as name1, import2 as name2, /* …, */ nameN } from 'module-name';"#,
+            r#"export { import1 as name1, import2 as name2, /* …, */ variableN as nameN } from 'module-name';"#,
             r#"export { default, /* …, */ } from 'module-name';"#,
             r#"export { default as name1 } from 'module-name';"#,
             //  Imports
@@ -770,6 +899,147 @@ mod tests {
                 }
             ),
         );
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregating_modules_re_export_all_from_other_module() {
+        let input = r#"export * from 'module-name';"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from, ["module-name"]);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregating_modules_re_export_all_as_namespace_from_other_module() {
+        let input = r#"export * as name1 from 'module-name';"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_hash_map!(
+            visitor.named_export_table,
+            (
+                "name1",
+                ModuleExport::ReExportFrom(FromOtherModule {
+                    from: String::from("module-name"),
+                    from_type: FromType::Namespace
+                })
+            ),
+        );
+        assert!(visitor.default_export.is_none());
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregating_modules_re_export_named_from_other_module() {
+        let input = r#"export { name1, /* …, */ nameN } from 'module-name';"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_hash_map!(
+            visitor.named_export_table,
+            (
+                "name1",
+                ModuleExport::ReExportFrom(FromOtherModule {
+                    from: String::from("module-name"),
+                    from_type: FromType::Named(String::from("name1"))
+                })
+            ),
+            (
+                "nameN",
+                ModuleExport::ReExportFrom(FromOtherModule {
+                    from: String::from("module-name"),
+                    from_type: FromType::Named(String::from("nameN"))
+                })
+            ),
+        );
+        assert!(visitor.default_export.is_none());
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregating_modules_re_export_named_alias_from_other_module() {
+        let input = r#"export { import1 as name1, import2 as name2, /* …, */ importN as nameN } from 'module-name';"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_hash_map!(
+            visitor.named_export_table,
+            (
+                "name1",
+                ModuleExport::ReExportFrom(FromOtherModule {
+                    from: String::from("module-name"),
+                    from_type: FromType::Named(String::from("import1"))
+                })
+            ),
+            (
+                "name2",
+                ModuleExport::ReExportFrom(FromOtherModule {
+                    from: String::from("module-name"),
+                    from_type: FromType::Named(String::from("import2"))
+                })
+            ),
+            (
+                "nameN",
+                ModuleExport::ReExportFrom(FromOtherModule {
+                    from: String::from("module-name"),
+                    from_type: FromType::Named(String::from("importN"))
+                })
+            ),
+        );
+        assert!(visitor.default_export.is_none());
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregating_modules_re_export_default_from_other_module() {
+        let input = r#"export { default, /* …, */ } from 'module-name';"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::ReExportFrom(FromOtherModule {
+                from: String::from("module-name"),
+                from_type: FromType::Default
+            }))
+        );
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregating_modules_re_export_default_as_named_from_other_module() {
+        let input = r#"export { default as name1 } from 'module-name';"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_hash_map!(
+            visitor.named_export_table,
+            (
+                "name1",
+                ModuleExport::ReExportFrom(FromOtherModule {
+                    from: String::from("module-name"),
+                    from_type: FromType::Default
+                })
+            ),
+        );
+        assert!(visitor.default_export.is_none());
+        assert_eq!(visitor.local_variable_table.len(), 0);
         assert_eq!(visitor.tracked_ids.len(), 0);
     }
 }
