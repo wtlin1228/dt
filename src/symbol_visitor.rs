@@ -148,7 +148,96 @@ impl Visit for ModuleSymbolVisitor {
         for module_item in &n.body {
             match module_item {
                 ast::ModuleItem::ModuleDecl(module_decl) => match module_decl {
-                    ast::ModuleDecl::Import(_) => todo!(),
+                    ast::ModuleDecl::Import(ast::ImportDecl {
+                        specifiers, src, ..
+                    }) => {
+                        let import_from_path = src.value.as_str();
+                        for specifier in specifiers.iter() {
+                            match specifier {
+                                ast::ImportSpecifier::Named(ast::ImportNamedSpecifier {
+                                    local,
+                                    imported,
+                                    ..
+                                }) => match imported {
+                                    Some(module_export_name) => match module_export_name {
+                                        ast::ModuleExportName::Ident(imported_ident) => {
+                                            match imported_ident.to_symbol_name().as_str() {
+                                                // import { default as alias1 } from 'module-name';
+                                                "default" => {
+                                                    self.track_id(local);
+                                                    self.add_module_scoped_variable(
+                                                        local,
+                                                        None,
+                                                        Some(FromOtherModule {
+                                                            from: import_from_path.to_string(),
+                                                            from_type: FromType::Default,
+                                                        }),
+                                                    );
+                                                }
+                                                // import { export1 as alias1 } from 'module-name';
+                                                _ => {
+                                                    self.track_id(local);
+                                                    self.add_module_scoped_variable(
+                                                        local,
+                                                        None,
+                                                        Some(FromOtherModule {
+                                                            from: import_from_path.to_string(),
+                                                            from_type: FromType::Named(
+                                                                imported_ident.to_symbol_name(),
+                                                            ),
+                                                        }),
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        ast::ModuleExportName::Str(_) => (),
+                                    },
+                                    // import { export1 } from 'module-name';
+                                    None => {
+                                        self.track_id(local);
+                                        self.add_module_scoped_variable(
+                                            local,
+                                            None,
+                                            Some(FromOtherModule {
+                                                from: import_from_path.to_string(),
+                                                from_type: FromType::Named(local.to_symbol_name()),
+                                            }),
+                                        );
+                                    }
+                                },
+                                // import defaultExport from 'module-name';
+                                ast::ImportSpecifier::Default(ast::ImportDefaultSpecifier {
+                                    local,
+                                    ..
+                                }) => {
+                                    self.track_id(local);
+                                    self.add_module_scoped_variable(
+                                        local,
+                                        None,
+                                        Some(FromOtherModule {
+                                            from: import_from_path.to_string(),
+                                            from_type: FromType::Default,
+                                        }),
+                                    );
+                                }
+                                // import * as name from 'module-name';
+                                ast::ImportSpecifier::Namespace(ast::ImportStarAsSpecifier {
+                                    local,
+                                    ..
+                                }) => {
+                                    self.track_id(local);
+                                    self.add_module_scoped_variable(
+                                        local,
+                                        None,
+                                        Some(FromOtherModule {
+                                            from: import_from_path.to_string(),
+                                            from_type: FromType::Namespace,
+                                        }),
+                                    );
+                                }
+                            }
+                        }
+                    }
                     ast::ModuleDecl::ExportDecl(ast::ExportDecl { decl, .. }) => match decl {
                         // export class ClassName { /* … */ }
                         ast::Decl::Class(ast::ClassDecl { ident, .. }) => {
@@ -184,7 +273,7 @@ impl Visit for ModuleSymbolVisitor {
                                 }
                             }
                         }
-                        ast::Decl::Using(_) => todo!(),
+                        ast::Decl::Using(_) => (),
                         ast::Decl::TsInterface(_) => (),
                         ast::Decl::TsTypeAlias(_) => (),
                         ast::Decl::TsEnum(_) => (),
@@ -207,9 +296,9 @@ impl Visit for ModuleSymbolVisitor {
                                                     namespace_ident,
                                                     import_from_path.to_string(),
                                                 ),
-                                            ast::ModuleExportName::Str(_) => todo!(),
+                                            ast::ModuleExportName::Str(_) => (),
                                         },
-                                        ast::ExportSpecifier::Default(_) => todo!(),
+                                        ast::ExportSpecifier::Default(_) => (),
                                         ast::ExportSpecifier::Named(
                                             ast::ExportNamedSpecifier { orig, exported, .. },
                                         ) => match (orig, exported) {
@@ -273,8 +362,8 @@ impl Visit for ModuleSymbolVisitor {
                             None => {
                                 for specifier in specifiers.iter() {
                                     match specifier {
-                                        ast::ExportSpecifier::Namespace(_) => todo!(),
-                                        ast::ExportSpecifier::Default(_) => todo!(),
+                                        ast::ExportSpecifier::Namespace(_) => (),
+                                        ast::ExportSpecifier::Default(_) => (),
                                         ast::ExportSpecifier::Named(
                                             ast::ExportNamedSpecifier { orig, exported, .. },
                                         ) => {
@@ -304,7 +393,7 @@ impl Visit for ModuleSymbolVisitor {
                                                     };
                                                 }
                                                 // [Not Support Yet] export { variable1 as 'string name' };
-                                                (_, _) => todo!(),
+                                                (_, _) => (),
                                             }
                                         }
                                     }
@@ -384,7 +473,7 @@ impl Visit for ModuleSymbolVisitor {
                     ast::ModuleDecl::TsExportAssignment(_) => (),
                     ast::ModuleDecl::TsNamespaceExport(_) => (),
                 },
-                ast::ModuleItem::Stmt(_) => todo!(),
+                ast::ModuleItem::Stmt(_) => (),
             }
         }
     }
@@ -451,16 +540,17 @@ macro_rules! assert_hash_map {
 
 #[cfg(test)]
 macro_rules! assert_tracked_ids {
-    ($visitor:expr, $expect:expr) => {
+    ($visitor:expr, $expect:expr) => {{
         let mut tracked_ids: Vec<&str> = $visitor
             .tracked_ids
             .iter()
             .map(|(atom, _)| atom.as_str())
             .collect();
         tracked_ids.sort();
-        $expect.sort();
-        assert_eq!(tracked_ids, $expect);
-    };
+        let mut expect = $expect;
+        expect.sort();
+        assert_eq!(tracked_ids, expect);
+    }};
 }
 
 #[cfg(test)]
@@ -480,7 +570,6 @@ mod tests {
     };
     use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
-    #[ignore]
     #[test]
     fn test_statements_are_handled() {
         let inputs = vec![
@@ -520,7 +609,7 @@ mod tests {
             r#"import { default as alias } from 'module-name';"#,
             r#"import { export1, export2 } from 'module-name';"#,
             r#"import { export1, export2 as alias2, /* … */ } from 'module-name';"#,
-            r#"import { 'string name' as alias } from 'module-name';"#,
+            r#"import { 'string name' as alias } from 'module-name';"#, // Not Support Yet
             r#"import defaultExport, { export1, /* … */ } from 'module-name';"#,
             r#"import defaultExport, * as name from 'module-name';"#,
             r#"import 'module-name';"#,
@@ -1038,6 +1127,284 @@ mod tests {
                 })
             ),
         );
+        assert!(visitor.default_export.is_none());
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_import_default() {
+        let input = r#"import defaultExport from 'module-name';"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "defaultExport",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Default
+                    })
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["defaultExport"]);
+    }
+
+    #[test]
+    fn test_import_namespace() {
+        let input = r#"import * as name from 'module-name';"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Namespace
+                    })
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name"]);
+    }
+
+    #[test]
+    fn test_import_named() {
+        let input = r#"import { export1 } from 'module-name';"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "export1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Named(String::from("export1"))
+                    })
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["export1"]);
+    }
+
+    #[test]
+    fn test_import_named_alias() {
+        let input = r#"import { export1 as alias1 } from 'module-name';"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "alias1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Named(String::from("export1"))
+                    })
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["alias1"]);
+    }
+
+    #[test]
+    fn test_import_default_alias() {
+        let input = r#"import { default as alias } from 'module-name';"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "alias",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Default
+                    })
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["alias"]);
+    }
+
+    #[test]
+    fn test_import_named_multiple() {
+        let input = r#"import { export1, export2 } from 'module-name';"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "export1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Named(String::from("export1"))
+                    })
+                }
+            ),
+            (
+                "export2",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Named(String::from("export2"))
+                    })
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["export1", "export2"]);
+    }
+
+    #[test]
+    fn test_import_named_alias_multiple() {
+        let input = r#"import { export1, export2 as alias2, /* … */ } from 'module-name';"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "export1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Named(String::from("export1"))
+                    })
+                }
+            ),
+            (
+                "alias2",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Named(String::from("export2"))
+                    })
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["export1", "alias2"]);
+    }
+
+    #[test]
+    fn test_import_named_default_multiple() {
+        let input = r#"import defaultExport, { export1, /* … */ } from 'module-name';"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "defaultExport",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Default
+                    })
+                }
+            ),
+            (
+                "export1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Named(String::from("export1"))
+                    })
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["defaultExport", "export1"]);
+    }
+
+    #[test]
+    fn test_import_default_namespace_multiple() {
+        let input = r#"import defaultExport, * as name from 'module-name';"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "defaultExport",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Default
+                    })
+                }
+            ),
+            (
+                "name",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Namespace
+                    })
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["defaultExport", "name"]);
+    }
+
+    #[test]
+    fn test_import_for_side_effect() {
+        let input = r#"import 'module-name';"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
         assert!(visitor.default_export.is_none());
         assert_eq!(visitor.local_variable_table.len(), 0);
         assert_eq!(visitor.tracked_ids.len(), 0);
