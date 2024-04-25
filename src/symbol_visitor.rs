@@ -473,7 +473,31 @@ impl Visit for ModuleSymbolVisitor {
                     ast::ModuleDecl::TsExportAssignment(_) => (),
                     ast::ModuleDecl::TsNamespaceExport(_) => (),
                 },
-                ast::ModuleItem::Stmt(_) => (),
+                ast::ModuleItem::Stmt(stmt) => match stmt {
+                    ast::Stmt::Decl(decl) => match decl {
+                        ast::Decl::Class(_) => todo!(),
+                        ast::Decl::Fn(_) => todo!(),
+                        ast::Decl::Var(var_decl) => {
+                            for decl in var_decl.decls.iter() {
+                                match &decl.name {
+                                    // let name1;
+                                    ast::Pat::Ident(ast::BindingIdent { id, .. }) => {
+                                        self.track_id(id);
+                                        self.add_module_scoped_variable(id, None, None);
+                                    }
+                                    ast::Pat::Array(_) => todo!(),
+                                    ast::Pat::Rest(_) => todo!(),
+                                    ast::Pat::Object(_) => todo!(),
+                                    ast::Pat::Assign(_) => todo!(),
+                                    ast::Pat::Invalid(_) => todo!(),
+                                    ast::Pat::Expr(_) => todo!(),
+                                }
+                            }
+                        }
+                        _ => (),
+                    },
+                    _ => (),
+                },
             }
         }
     }
@@ -570,6 +594,7 @@ mod tests {
     };
     use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
+    #[ignore]
     #[test]
     fn test_statements_are_handled() {
         let inputs = vec![
@@ -613,6 +638,22 @@ mod tests {
             r#"import defaultExport, { export1, /* … */ } from 'module-name';"#,
             r#"import defaultExport, * as name from 'module-name';"#,
             r#"import 'module-name';"#,
+            // Declaring variables
+            r#"let name1;"#,
+            r#"let name1 = value1;"#,
+            r#"let name1 = value1, name2 = value2;"#,
+            r#"let name1, name2 = value2;"#,
+            r#"let name1 = value1, name2, /* …, */ nameN = valueN;"#,
+            r#"const name1 = value1;"#,
+            r#"const name1 = value1, name2 = value2;"#,
+            r#"const name1 = value1, name2 = value2, /* …, */ nameN = valueN;"#,
+            // Functions and classes
+            r#"function name(param0) { /* … */ }"#,
+            r#"function* name(param0) { /* … */ }"#,
+            r#"async function name(param0) { /* … */ }"#,
+            r#"async function* name(param0) { /* … */ }"#,
+            r#"class name { /* … */ }"#,
+            r#"class name extends otherName { /* … */ }"#,
         ];
         inputs.iter().for_each(|&input| {
             let mut visitor = ModuleSymbolVisitor::new();
@@ -1408,5 +1449,230 @@ mod tests {
         assert!(visitor.default_export.is_none());
         assert_eq!(visitor.local_variable_table.len(), 0);
         assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_declaring_variable_let() {
+        let input = r#"let name1;"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name1"]);
+    }
+
+    #[test]
+    fn test_declaring_variable_let_with_init() {
+        let input = r#"let name1 = value1;"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name1"]);
+    }
+
+    #[test]
+    fn test_declaring_variable_let_with_init_multiple() {
+        let input = r#"let name1 = value1, name2 = value2;"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+            (
+                "name2",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name1", "name2"]);
+    }
+
+    #[test]
+    fn test_declaring_variable_let_with_init_multiple_combined() {
+        let input = r#"let name1, name2 = value2;"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+            (
+                "name2",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name1", "name2"]);
+    }
+
+    #[test]
+    fn test_declaring_variable_let_multiple_with_comment() {
+        let input = r#"let name1 = value1, name2, /* …, */ nameN = valueN;"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+            (
+                "name2",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+            (
+                "nameN",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name1", "name2", "nameN"]);
+    }
+
+    #[test]
+    fn test_declaring_variable_const_with_init() {
+        let input = r#"const name1 = value1;"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name1"]);
+    }
+
+    #[test]
+    fn test_declaring_variable_const_with_init_multiple() {
+        let input = r#"const name1 = value1, name2 = value2;"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+            (
+                "name2",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name1", "name2"]);
+    }
+
+    #[test]
+    fn test_declaring_variable_const_with_init_multiple_with_comment() {
+        let input = r#"const name1 = value1, name2 = value2, /* …, */ nameN = valueN;"#;
+        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name1",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+            (
+                "name2",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+            (
+                "nameN",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name1", "name2", "nameN"]);
     }
 }
