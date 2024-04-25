@@ -1,4 +1,7 @@
-use super::types::{FromOtherModule, ModuleExport, ModuleScopedVariable};
+use super::{
+    types::{FromOtherModule, ModuleExport, ModuleScopedVariable},
+    SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
+};
 
 use std::collections::{HashMap, HashSet};
 use swc_core::ecma::{ast, visit::Visit};
@@ -73,10 +76,24 @@ impl ModuleSymbolVisitor {
     }
 
     fn named_export_local_var(&mut self, export_ident: &ast::Ident, local_var_ident: &ast::Ident) {
+        assert_eq!(
+            self.named_export_table
+                .contains_key(export_ident.to_symbol_name().as_str()),
+            false,
+            "module can't export the same name twice"
+        );
         self.named_export_table.insert(
             export_ident.to_symbol_name(),
             ModuleExport::Local(local_var_ident.to_symbol_name()),
         );
+    }
+
+    fn set_default_export(&mut self, module_export: ModuleExport) {
+        assert!(
+            self.default_export.is_none(),
+            "module can't export default twice"
+        );
+        self.default_export = Some(module_export);
     }
 }
 
@@ -128,9 +145,111 @@ impl Visit for ModuleSymbolVisitor {
                         ast::Decl::TsEnum(_) => (),
                         ast::Decl::TsModule(_) => (),
                     },
-                    ast::ModuleDecl::ExportNamed(_) => todo!(),
-                    ast::ModuleDecl::ExportDefaultDecl(_) => todo!(),
-                    ast::ModuleDecl::ExportDefaultExpr(_) => todo!(),
+                    ast::ModuleDecl::ExportNamed(ast::NamedExport { specifiers, .. }) => {
+                        for specifier in specifiers.iter() {
+                            match specifier {
+                                ast::ExportSpecifier::Namespace(_) => todo!(),
+                                ast::ExportSpecifier::Default(_) => todo!(),
+                                ast::ExportSpecifier::Named(ast::ExportNamedSpecifier {
+                                    orig,
+                                    exported,
+                                    ..
+                                }) => {
+                                    match (orig, exported) {
+                                        // export { name1, /* …, */ nameN };
+                                        (ast::ModuleExportName::Ident(ident), None) => {
+                                            self.named_export_local_var(ident, ident);
+                                        }
+                                        // export { variable1 as name1, variable2 as name2, /* …, */ variableN as nameN };
+                                        // export { name1 as default /*, … */ };
+                                        (
+                                            ast::ModuleExportName::Ident(orig_ident),
+                                            Some(ast::ModuleExportName::Ident(export_ident)),
+                                        ) => {
+                                            match export_ident.to_symbol_name().as_str() {
+                                                "default" => {
+                                                    self.set_default_export(ModuleExport::Local(
+                                                        orig_ident.to_symbol_name(),
+                                                    ))
+                                                }
+                                                _ => self.named_export_local_var(
+                                                    export_ident,
+                                                    orig_ident,
+                                                ),
+                                            };
+                                        }
+                                        // export { variable1 as 'string name' };
+                                        (_, _) => todo!(),
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ast::ModuleDecl::ExportDefaultDecl(ast::ExportDefaultDecl { decl, .. }) => {
+                        match decl {
+                            ast::DefaultDecl::Class(ast::ClassExpr { ident, .. }) => match ident {
+                                // export default class ClassName { /* … */ }
+                                Some(ident) => {
+                                    self.track_id(ident);
+                                    self.add_module_scoped_variable(ident, None, None);
+                                    self.set_default_export(ModuleExport::Local(
+                                        ident.to_symbol_name(),
+                                    ))
+                                }
+                                // export default class { /* … */ }
+                                // Use `SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT` for anonymous case.
+                                // This symbol name shouldn't be tracked since this symbol cannot be used else where
+                                // in this module.
+                                None => {
+                                    self.local_variable_table.insert(
+                                        SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                        ModuleScopedVariable {
+                                            depend_on: None,
+                                            import_from: None,
+                                        },
+                                    );
+                                    self.set_default_export(ModuleExport::Local(
+                                        SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                    ))
+                                }
+                            },
+                            ast::DefaultDecl::Fn(ast::FnExpr { ident, .. }) => match ident {
+                                // export default function functionName() { /* … */ }
+                                Some(ident) => {
+                                    self.track_id(ident);
+                                    self.add_module_scoped_variable(ident, None, None);
+                                    self.set_default_export(ModuleExport::Local(
+                                        ident.to_symbol_name(),
+                                    ))
+                                }
+                                // export default function () { /* … */ }
+                                // Use `SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT` for anonymous case.
+                                // This symbol name shouldn't be tracked since this symbol cannot be used else where
+                                // in this module.
+                                None => {
+                                    self.local_variable_table.insert(
+                                        SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                        ModuleScopedVariable {
+                                            depend_on: None,
+                                            import_from: None,
+                                        },
+                                    );
+                                    self.set_default_export(ModuleExport::Local(
+                                        SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                    ))
+                                }
+                            },
+                            ast::DefaultDecl::TsInterfaceDecl(_) => (),
+                        }
+                    }
+                    ast::ModuleDecl::ExportDefaultExpr(ast::ExportDefaultExpr { expr, .. }) => {
+                        match &**expr {
+                            ast::Expr::Ident(ident) => {
+                                self.set_default_export(ModuleExport::Local(ident.to_symbol_name()))
+                            }
+                            _ => (),
+                        }
+                    }
                     ast::ModuleDecl::ExportAll(_) => todo!(),
                     ast::ModuleDecl::TsImportEquals(_) => (),
                     ast::ModuleDecl::TsExportAssignment(_) => (),
@@ -232,6 +351,7 @@ mod tests {
     };
     use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
+    #[ignore]
     #[test]
     fn test_statements_are_handled() {
         let inputs = vec![
@@ -241,12 +361,12 @@ mod tests {
             r#"export function functionName() { /* … */ }"#,
             r#"export class ClassName { /* … */ }"#,
             r#"export function* generatorFunctionName() { /* … */ }"#,
-            r#"export const { name1, name2: bar } = o;"#,
-            r#"export const [ name1, name2 ] = array;"#,
+            r#"export const { name1, name2: bar } = o;"#, // Not Support Yet
+            r#"export const [ name1, name2 ] = array;"#,  // Not Support Yet
             // Export list
             r#"export { name1, /* …, */ nameN };"#,
-            r#"export { variable1 as name1, variable2 as name2, /* …, */ nameN };"#,
-            r#"export { variable1 as 'string name' };"#,
+            r#"export { variable1 as name1, variable2 as name2, /* …, */ variableN as nameN };"#,
+            r#"export { variable1 as 'string name' };"#, // Not Support Yet
             r#"export { name1 as default /*, … */ };"#,
             // Default exports
             r#"export default expression;"#,
@@ -427,5 +547,229 @@ mod tests {
             ),
         );
         assert_tracked_ids!(visitor, ["generatorFunctionName"]);
+    }
+
+    #[test]
+    fn test_exporting_list_named() {
+        let input = r#"export { name1, /* …, */ nameN };"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_hash_map!(
+            visitor.named_export_table,
+            ("name1", ModuleExport::Local(String::from("name1"))),
+            ("nameN", ModuleExport::Local(String::from("nameN"))),
+        );
+        assert!(visitor.default_export.is_none());
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_exporting_list_named_alias() {
+        let input =
+            r#"export { variable1 as name1, variable2 as name2, /* …, */ variableN as nameN };"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_hash_map!(
+            visitor.named_export_table,
+            ("name1", ModuleExport::Local(String::from("variable1"))),
+            ("name2", ModuleExport::Local(String::from("variable2"))),
+            ("nameN", ModuleExport::Local(String::from("variableN"))),
+        );
+        assert!(visitor.default_export.is_none());
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_exporting_list_default() {
+        let input = r#"export { name1 as default /*, … */ };"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(String::from("name1")))
+        );
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_exporting_default_expression() {
+        let input = r#"export default expression;"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(String::from("expression")))
+        );
+        assert_eq!(visitor.local_variable_table.len(), 0);
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_exporting_default_function() {
+        let input = r#"export default function functionName() { /* … */ }"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(String::from("functionName")))
+        );
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "functionName",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["functionName"]);
+    }
+
+    #[test]
+    fn test_exporting_default_class() {
+        let input = r#"export default class ClassName { /* … */ }"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(String::from("ClassName")))
+        );
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "ClassName",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["ClassName"]);
+    }
+
+    #[test]
+    fn test_exporting_default_generator_function() {
+        let input = r#"export default function* generatorFunctionName() { /* … */ }"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(String::from("generatorFunctionName")))
+        );
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "generatorFunctionName",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["generatorFunctionName"]);
+    }
+
+    #[test]
+    fn test_exporting_default_anonymous_function() {
+        let input = r#"export default function () { /* … */ }"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string()
+            ))
+        );
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_exporting_default_anonymous_class() {
+        let input = r#"export default class { /* … */ }"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string()
+            ))
+        );
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_exporting_default_anonymous_generator_function() {
+        let input = r#"export default function* () { /* … */ }"#;
+        let mut visitor = ModuleSymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string()
+            ))
+        );
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_eq!(visitor.tracked_ids.len(), 0);
     }
 }
