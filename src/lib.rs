@@ -1,6 +1,6 @@
+mod anonymous_default_export;
+mod common;
 mod parser;
+mod symbol_dependency_visitor;
 mod symbol_visitor;
-mod types;
-
-const SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT: &'static str =
-    "SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT";
+mod to_symbol_name;

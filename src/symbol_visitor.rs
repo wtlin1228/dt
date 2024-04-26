@@ -1,23 +1,14 @@
 use super::{
-    types::{FromOtherModule, FromType, ModuleExport, ModuleScopedVariable},
-    SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
+    anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
+    common::{FromOtherModule, FromType, ModuleExport, ModuleScopedVariable},
+    to_symbol_name::ToSymbolName,
 };
 
 use std::collections::{HashMap, HashSet};
 use swc_core::ecma::{ast, visit::Visit};
 
-trait ToSymbolName {
-    fn to_symbol_name(&self) -> String;
-}
-
-impl ToSymbolName for ast::Ident {
-    fn to_symbol_name(&self) -> String {
-        self.to_id().0.to_string()
-    }
-}
-
 #[derive(Debug)]
-pub struct ModuleSymbolVisitor {
+pub struct SymbolVisitor {
     pub re_exporting_all_from: Vec<String>,
     pub named_export_table: HashMap<String, ModuleExport>,
     pub default_export: Option<ModuleExport>,
@@ -39,7 +30,7 @@ pub struct ModuleSymbolVisitor {
     pub tracked_ids: HashSet<ast::Id>,
 }
 
-impl ModuleSymbolVisitor {
+impl SymbolVisitor {
     pub fn new() -> Self {
         Self {
             re_exporting_all_from: vec![],
@@ -142,9 +133,8 @@ impl ModuleSymbolVisitor {
     }
 }
 
-impl Visit for ModuleSymbolVisitor {
+impl Visit for SymbolVisitor {
     fn visit_module(&mut self, n: &ast::Module) {
-        println!("{:#?}", n);
         for module_item in &n.body {
             match module_item {
                 ast::ModuleItem::ModuleDecl(module_decl) => match module_decl {
@@ -463,6 +453,38 @@ impl Visit for ModuleSymbolVisitor {
                             ast::Expr::Ident(ident) => {
                                 self.set_default_export(ModuleExport::Local(ident.to_symbol_name()))
                             }
+                            // export default [name1, name2, /* …, */ nameN];
+                            // Use `SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT` for anonymous case.
+                            // This symbol name shouldn't be tracked since this symbol cannot be used else where
+                            // in this module.
+                            ast::Expr::Array(_) => {
+                                self.local_variable_table.insert(
+                                    SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                    ModuleScopedVariable {
+                                        depend_on: None,
+                                        import_from: None,
+                                    },
+                                );
+                                self.set_default_export(ModuleExport::Local(
+                                    SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                ));
+                            }
+                            // export default { name1, name2, /* …, */ nameN };
+                            // Use `SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT` for anonymous case.
+                            // This symbol name shouldn't be tracked since this symbol cannot be used else where
+                            // in this module.
+                            ast::Expr::Object(_) => {
+                                self.local_variable_table.insert(
+                                    SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                    ModuleScopedVariable {
+                                        depend_on: None,
+                                        import_from: None,
+                                    },
+                                );
+                                self.set_default_export(ModuleExport::Local(
+                                    SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                ));
+                            }
                             _ => (),
                         }
                     }
@@ -475,16 +497,16 @@ impl Visit for ModuleSymbolVisitor {
                 },
                 ast::ModuleItem::Stmt(stmt) => match stmt {
                     ast::Stmt::Decl(decl) => match decl {
-                        // r#"class name { /* … */ }"#,
-                        // r#"class name extends otherName { /* … */ }"#,
+                        // class name { /* … */ }
+                        // class name extends otherName { /* … */ }
                         ast::Decl::Class(ast::ClassDecl { ident, .. }) => {
                             self.track_id(ident);
                             self.add_module_scoped_variable(ident, None, None);
                         }
-                        // r#"function name(param0) { /* … */ }"#,
-                        // r#"function* name(param0) { /* … */ }"#,
-                        // r#"async function name(param0) { /* … */ }"#,
-                        // r#"async function* name(param0) { /* … */ }"#,
+                        // function name(param0) { /* … */ }
+                        // function* name(param0) { /* … */ }
+                        // async function name(param0) { /* … */ }
+                        // async function* name(param0) { /* … */ }
                         ast::Decl::Fn(ast::FnDecl { ident, .. }) => {
                             self.track_id(ident);
                             self.add_module_scoped_variable(ident, None, None);
@@ -492,14 +514,14 @@ impl Visit for ModuleSymbolVisitor {
                         ast::Decl::Var(var_decl) => {
                             for decl in var_decl.decls.iter() {
                                 match &decl.name {
-                                    // r#"let name1;"#,
-                                    // r#"let name1 = value1;"#,
-                                    // r#"let name1 = value1, name2 = value2;"#,
-                                    // r#"let name1, name2 = value2;"#,
-                                    // r#"let name1 = value1, name2, /* …, */ nameN = valueN;"#,
-                                    // r#"const name1 = value1;"#,
-                                    // r#"const name1 = value1, name2 = value2;"#,
-                                    // r#"const name1 = value1, name2 = value2, /* …, */ nameN = valueN;"#,
+                                    // let name1;
+                                    // let name1 = value1;
+                                    // let name1 = value1, name2 = value2;
+                                    // let name1, name2 = value2;
+                                    // let name1 = value1, name2, /* …, */ nameN = valueN;
+                                    // const name1 = value1;
+                                    // const name1 = value1, name2 = value2;
+                                    // const name1 = value1, name2 = value2, /* …, */ nameN = valueN;
                                     ast::Pat::Ident(ast::BindingIdent { id, .. }) => {
                                         self.track_id(id);
                                         self.add_module_scoped_variable(id, None, None);
@@ -565,40 +587,10 @@ macro_rules! parse_with_visitor {
 }
 
 #[cfg(test)]
-#[macro_export]
-macro_rules! assert_hash_map {
-    ($hash_map:expr, $(($key:expr, $value:expr)),*) => {{
-        let mut count = 0;
-        $(
-            count += 1;
-            assert_eq!($hash_map.get($key).unwrap(), &$value);
-        )*
-        assert_eq!($hash_map.len(), count);
-    }};
-
-    ($hash_map:expr, $(($key:expr, $value:expr),)*) => {{
-        $crate::assert_hash_map!($hash_map, $(($key, $value)),*)
-    }};
-}
-
-#[cfg(test)]
-macro_rules! assert_tracked_ids {
-    ($visitor:expr, $expect:expr) => {{
-        let mut tracked_ids: Vec<&str> = $visitor
-            .tracked_ids
-            .iter()
-            .map(|(atom, _)| atom.as_str())
-            .collect();
-        tracked_ids.sort();
-        let mut expect = $expect;
-        expect.sort();
-        assert_eq!(tracked_ids, expect);
-    }};
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::{assert_hash_map, assert_tracked_ids};
 
     use swc_core::{
         common::{
@@ -631,6 +623,8 @@ mod tests {
             r#"export { name1 as default /*, … */ };"#,
             // Default exports
             r#"export default expression;"#,
+            r#"export default [name1, name2, /* …, */ nameN];"#,
+            r#"export default { name1, name2, /* …, */ nameN };"#,
             r#"export default function functionName() { /* … */ }"#,
             r#"export default class ClassName { /* … */ }"#,
             r#"export default function* generatorFunctionName() { /* … */ }"#,
@@ -674,7 +668,7 @@ mod tests {
             r#"class name extends otherName { /* … */ }"#,
         ];
         inputs.iter().for_each(|&input| {
-            let mut visitor = ModuleSymbolVisitor::new();
+            let mut visitor = SymbolVisitor::new();
             parse_with_visitor![input, visitor];
         });
     }
@@ -682,7 +676,7 @@ mod tests {
     #[test]
     fn test_exporting_declaration_let() {
         let input = r#"export let name1, name2/*, … */; // also var"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -715,7 +709,7 @@ mod tests {
     #[test]
     fn test_exporting_declaration_const() {
         let input = r#"export const name1 = 1, name2 = 2/*, … */; // also var, let"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -748,7 +742,7 @@ mod tests {
     #[test]
     fn test_exporting_declaration_function() {
         let input = r#"export function functionName() { /* … */ }"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -776,7 +770,7 @@ mod tests {
     #[test]
     fn test_exporting_declaration_class() {
         let input = r#"export class ClassName { /* … */ }"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -801,7 +795,7 @@ mod tests {
     #[test]
     fn test_exporting_declaration_generator() {
         let input = r#"export function* generatorFunctionName() { /* … */ }"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -829,7 +823,7 @@ mod tests {
     #[test]
     fn test_exporting_list_named() {
         let input = r#"export { name1, /* …, */ nameN };"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -847,7 +841,7 @@ mod tests {
     fn test_exporting_list_named_alias() {
         let input =
             r#"export { variable1 as name1, variable2 as name2, /* …, */ variableN as nameN };"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -865,7 +859,7 @@ mod tests {
     #[test]
     fn test_exporting_list_default() {
         let input = r#"export { name1 as default /*, … */ };"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -881,7 +875,7 @@ mod tests {
     #[test]
     fn test_exporting_default_expression() {
         let input = r#"export default expression;"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -895,9 +889,63 @@ mod tests {
     }
 
     #[test]
+    fn test_exporting_default_array() {
+        let input = r#"export default [name1, name2, /* …, */ nameN];"#;
+        let mut visitor = SymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string()
+            ))
+        );
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_exporting_default_object() {
+        let input = r#"export default { name1, name2, /* …, */ nameN };"#;
+        let mut visitor = SymbolVisitor::new();
+        parse_with_visitor![input, visitor];
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string()
+            ))
+        );
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
     fn test_exporting_default_function() {
         let input = r#"export default function functionName() { /* … */ }"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -922,7 +970,7 @@ mod tests {
     #[test]
     fn test_exporting_default_class() {
         let input = r#"export default class ClassName { /* … */ }"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -947,7 +995,7 @@ mod tests {
     #[test]
     fn test_exporting_default_generator_function() {
         let input = r#"export default function* generatorFunctionName() { /* … */ }"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -972,7 +1020,7 @@ mod tests {
     #[test]
     fn test_exporting_default_anonymous_function() {
         let input = r#"export default function () { /* … */ }"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -999,7 +1047,7 @@ mod tests {
     #[test]
     fn test_exporting_default_anonymous_class() {
         let input = r#"export default class { /* … */ }"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1026,7 +1074,7 @@ mod tests {
     #[test]
     fn test_exporting_default_anonymous_generator_function() {
         let input = r#"export default function* () { /* … */ }"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1053,7 +1101,7 @@ mod tests {
     #[test]
     fn test_aggregating_modules_re_export_all_from_other_module() {
         let input = r#"export * from 'module-name';"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from, ["module-name"]);
@@ -1066,7 +1114,7 @@ mod tests {
     #[test]
     fn test_aggregating_modules_re_export_all_as_namespace_from_other_module() {
         let input = r#"export * as name1 from 'module-name';"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1088,7 +1136,7 @@ mod tests {
     #[test]
     fn test_aggregating_modules_re_export_named_from_other_module() {
         let input = r#"export { name1, /* …, */ nameN } from 'module-name';"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1117,7 +1165,7 @@ mod tests {
     #[test]
     fn test_aggregating_modules_re_export_named_alias_from_other_module() {
         let input = r#"export { import1 as name1, import2 as name2, /* …, */ importN as nameN } from 'module-name';"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1153,7 +1201,7 @@ mod tests {
     #[test]
     fn test_aggregating_modules_re_export_default_from_other_module() {
         let input = r#"export { default, /* …, */ } from 'module-name';"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1172,7 +1220,7 @@ mod tests {
     #[test]
     fn test_aggregating_modules_re_export_default_as_named_from_other_module() {
         let input = r#"export { default as name1 } from 'module-name';"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1194,7 +1242,7 @@ mod tests {
     #[test]
     fn test_import_default() {
         let input = r#"import defaultExport from 'module-name';"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1219,7 +1267,7 @@ mod tests {
     #[test]
     fn test_import_namespace() {
         let input = r#"import * as name from 'module-name';"#;
-        let mut visitor = ModuleSymbolVisitor::new();
+        let mut visitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1244,7 +1292,7 @@ mod tests {
     #[test]
     fn test_import_named() {
         let input = r#"import { export1 } from 'module-name';"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1269,7 +1317,7 @@ mod tests {
     #[test]
     fn test_import_named_alias() {
         let input = r#"import { export1 as alias1 } from 'module-name';"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1294,7 +1342,7 @@ mod tests {
     #[test]
     fn test_import_default_alias() {
         let input = r#"import { default as alias } from 'module-name';"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1319,7 +1367,7 @@ mod tests {
     #[test]
     fn test_import_named_multiple() {
         let input = r#"import { export1, export2 } from 'module-name';"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1354,7 +1402,7 @@ mod tests {
     #[test]
     fn test_import_named_alias_multiple() {
         let input = r#"import { export1, export2 as alias2, /* … */ } from 'module-name';"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1389,7 +1437,7 @@ mod tests {
     #[test]
     fn test_import_named_default_multiple() {
         let input = r#"import defaultExport, { export1, /* … */ } from 'module-name';"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1424,7 +1472,7 @@ mod tests {
     #[test]
     fn test_import_default_namespace_multiple() {
         let input = r#"import defaultExport, * as name from 'module-name';"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1459,7 +1507,7 @@ mod tests {
     #[test]
     fn test_import_for_side_effect() {
         let input = r#"import 'module-name';"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1472,7 +1520,7 @@ mod tests {
     #[test]
     fn test_declaring_variable_let() {
         let input = r#"let name1;"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1494,7 +1542,7 @@ mod tests {
     #[test]
     fn test_declaring_variable_let_with_init() {
         let input = r#"let name1 = value1;"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1516,7 +1564,7 @@ mod tests {
     #[test]
     fn test_declaring_variable_let_with_init_multiple() {
         let input = r#"let name1 = value1, name2 = value2;"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1545,7 +1593,7 @@ mod tests {
     #[test]
     fn test_declaring_variable_let_with_init_multiple_combined() {
         let input = r#"let name1, name2 = value2;"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1574,7 +1622,7 @@ mod tests {
     #[test]
     fn test_declaring_variable_let_multiple_with_comment() {
         let input = r#"let name1 = value1, name2, /* …, */ nameN = valueN;"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1610,7 +1658,7 @@ mod tests {
     #[test]
     fn test_declaring_variable_const_with_init() {
         let input = r#"const name1 = value1;"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1632,7 +1680,7 @@ mod tests {
     #[test]
     fn test_declaring_variable_const_with_init_multiple() {
         let input = r#"const name1 = value1, name2 = value2;"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1661,7 +1709,7 @@ mod tests {
     #[test]
     fn test_declaring_variable_const_with_init_multiple_with_comment() {
         let input = r#"const name1 = value1, name2 = value2, /* …, */ nameN = valueN;"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1697,7 +1745,7 @@ mod tests {
     #[test]
     fn test_declaring_function() {
         let input = r#"function name(param0) { /* … */ }"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1719,7 +1767,7 @@ mod tests {
     #[test]
     fn test_declaring_generator_function() {
         let input = r#"function* name(param0) { /* … */ }"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1741,7 +1789,7 @@ mod tests {
     #[test]
     fn test_declaring_async_function() {
         let input = r#"async function name(param0) { /* … */ }"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1763,7 +1811,7 @@ mod tests {
     #[test]
     fn test_declaring_async_generator_function() {
         let input = r#"async function* name(param0) { /* … */ }"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1785,7 +1833,7 @@ mod tests {
     #[test]
     fn test_declaring_class() {
         let input = r#"class name { /* … */ }"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
@@ -1807,7 +1855,7 @@ mod tests {
     #[test]
     fn test_declaring_class_extend() {
         let input = r#"class name extends otherName { /* … */ }"#;
-        let mut visitor: ModuleSymbolVisitor = ModuleSymbolVisitor::new();
+        let mut visitor: SymbolVisitor = SymbolVisitor::new();
         parse_with_visitor![input, visitor];
 
         assert_eq!(visitor.re_exporting_all_from.len(), 0);
