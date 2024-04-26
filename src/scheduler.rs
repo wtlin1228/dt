@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use swc_core::{
     common::{
@@ -22,7 +22,7 @@ pub struct ParserCandidateScheduler {
     root: PathBuf,
 
     // candidates that are ready to be parsed
-    good_candidates: Vec<Candidate>,
+    good_candidates: VecDeque<Candidate>,
 
     // candidates that are still blocked by others
     blocked_candidates: HashMap<Candidate, usize>,
@@ -37,7 +37,7 @@ impl ParserCandidateScheduler {
 
         let mut scheduler = Self {
             root: root.clone(),
-            good_candidates: vec![],
+            good_candidates: VecDeque::new(),
             blocked_candidates: HashMap::new(),
             blocking_table: HashMap::new(),
         };
@@ -62,7 +62,7 @@ impl ParserCandidateScheduler {
                                 .push(path.clone());
                         }
                     }
-                    None => scheduler.good_candidates.push(path.clone()),
+                    None => scheduler.good_candidates.push_back(path.clone()),
                 }
             }
         }
@@ -71,7 +71,7 @@ impl ParserCandidateScheduler {
     }
 
     pub fn get_one_candidate(&mut self) -> Option<Candidate> {
-        self.good_candidates.pop()
+        self.good_candidates.pop_front()
     }
 
     pub fn mark_candidate_as_parsed(&mut self, candidate: Candidate) {
@@ -87,7 +87,7 @@ impl ParserCandidateScheduler {
                         });
                     if not_blocked_anymore {
                         self.blocked_candidates.remove(&blocked_candidate);
-                        self.good_candidates.push(blocked_candidate);
+                        self.good_candidates.push_back(blocked_candidate);
                     }
                 }
             }
