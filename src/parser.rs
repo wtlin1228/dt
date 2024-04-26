@@ -4,7 +4,7 @@ use super::{
 };
 
 use anyhow::Context;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 use swc_core::{
     common::{
         errors::{ColorConfig, Handler},
@@ -18,7 +18,15 @@ use swc_core::{
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
-pub fn parse_module(
+pub fn parse(module_path: &str) -> anyhow::Result<ParsedModule> {
+    let cm: Lrc<SourceMap> = Default::default();
+    let fm = cm
+        .load_file(Path::new(module_path))
+        .expect(format!("failed to load {:?}", module_path).as_str());
+    parse_module(module_path, cm, fm)
+}
+
+fn parse_module(
     module_src: &str,
     cm: Lrc<SourceMap>,
     fm: Lrc<SourceFile>,

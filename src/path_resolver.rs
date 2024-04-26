@@ -1,7 +1,7 @@
 use anyhow::{self, bail};
 use std::path::{Path, PathBuf};
 
-trait ToCanonicalString {
+pub trait ToCanonicalString {
     fn to_canonical_string(&self) -> anyhow::Result<String>;
 }
 

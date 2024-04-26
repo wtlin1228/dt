@@ -1,7 +1,8 @@
 mod anonymous_default_export;
 mod common;
-mod parser;
-mod path_resolver;
+pub mod parser;
+pub mod path_resolver;
+pub mod scheduler;
 mod symbol_dependency_visitor;
 mod symbol_visitor;
 mod to_symbol_name;
@@ -12,6 +13,7 @@ use std::collections::HashMap;
 
 use common::{FromOtherModule, FromType, ModuleExport, ParsedModule};
 
+#[derive(Debug)]
 pub struct DependencyTracker {
     pub parsed_modules_table: HashMap<String, ParsedModule>,
 }
@@ -40,7 +42,7 @@ impl DependencyTracker {
                 let imported_module = self
                     .parsed_modules_table
                     .get(&resolved_path)
-                    .context(format!("import module {} not exists", resolved_path))?;
+                    .context(format!("imported module {} not exists", resolved_path))?;
                 for (key, _) in imported_module.named_export_table.iter() {
                     assert_eq!(
                         parsed_module.named_export_table.contains_key(key),
@@ -69,8 +71,12 @@ impl DependencyTracker {
         for (_, value) in parsed_module.local_variable_table.iter_mut() {
             match value.import_from {
                 Some(ref mut from_other_module) => {
-                    from_other_module.from = path_resolver
-                        .resolve_path(&parsed_module.canonical_path, &from_other_module.from)?;
+                    match path_resolver
+                        .resolve_path(&parsed_module.canonical_path, &from_other_module.from)
+                    {
+                        Ok(resolved_path) => from_other_module.from = resolved_path,
+                        Err(_) => (),
+                    }
                 }
                 None => (),
             }
@@ -79,8 +85,12 @@ impl DependencyTracker {
             match value {
                 ModuleExport::Local(_) => (),
                 ModuleExport::ReExportFrom(ref mut from_other_module) => {
-                    from_other_module.from = path_resolver
-                        .resolve_path(&parsed_module.canonical_path, &from_other_module.from)?;
+                    match path_resolver
+                        .resolve_path(&parsed_module.canonical_path, &from_other_module.from)
+                    {
+                        Ok(resolved_path) => from_other_module.from = resolved_path,
+                        Err(_) => (),
+                    }
                 }
             }
         }
