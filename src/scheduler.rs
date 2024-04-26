@@ -116,7 +116,9 @@ impl ParserCandidateScheduler {
             true => {
                 for entry in path.read_dir().unwrap() {
                     if let Ok(entry) = entry {
-                        files.append(&mut Self::collect_paths(&entry.path()));
+                        files.append(&mut Self::collect_paths(
+                            &entry.path().canonicalize().unwrap(),
+                        ));
                     }
                 }
             }

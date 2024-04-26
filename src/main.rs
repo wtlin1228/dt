@@ -28,6 +28,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("{:#?}", dependency_tracker);
+    println!(
+        "parsed module count: {}",
+        dependency_tracker.parsed_modules_table.len()
+    );
 
     Ok(())
 }
