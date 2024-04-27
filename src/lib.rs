@@ -7,3 +7,4 @@ pub mod scheduler;
 mod symbol_dependency_visitor;
 mod symbol_visitor;
 mod to_symbol_name;
+pub mod used_by_graph;
