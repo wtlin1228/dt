@@ -1,6 +1,7 @@
 mod anonymous_default_export;
 mod common;
 pub mod depend_on_graph;
+pub mod dependency_tracker;
 pub mod parser;
 pub mod path_resolver;
 pub mod scheduler;

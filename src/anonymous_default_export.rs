@@ -1,7 +1,6 @@
 use swc_core::{atoms::Atom, common::SyntaxContext, ecma::ast::Id};
 
-pub const SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT: &'static str =
-    "__~#~SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT~#~__";
+pub const SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT: &'static str = "+-*/default@#$%";
 
 pub fn get_anonymous_default_export_id() -> Id {
     (
