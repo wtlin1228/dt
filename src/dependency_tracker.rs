@@ -13,14 +13,22 @@ pub enum TraceTarget {
 type ModuleSymbol = (String, TraceTarget);
 
 #[derive(Debug)]
-struct DependencyTracker {
+pub struct DependencyTracker<'graph> {
     cache: HashMap<ModuleSymbol, Vec<Vec<ModuleSymbol>>>,
+    graph: &'graph UsedByGraph,
 }
 
-impl DependencyTracker {
+impl<'graph> DependencyTracker<'graph> {
+    pub fn new(graph: &'graph UsedByGraph) -> Self {
+        Self {
+            cache: HashMap::new(),
+            graph,
+        }
+    }
+
     pub fn trace(
         &mut self,
-        graph: &UsedByGraph,
+        // graph: &UsedByGraph,
         module_symbol: ModuleSymbol,
     ) -> anyhow::Result<Vec<Vec<ModuleSymbol>>> {
         // early return if cached
@@ -28,7 +36,8 @@ impl DependencyTracker {
             return Ok(cached.clone());
         }
 
-        let module = graph
+        let module = self
+            .graph
             .modules
             .get(&module_symbol.0)
             .context(format!("module {} not found", module_symbol.0))?;
@@ -50,33 +59,28 @@ impl DependencyTracker {
             for next_target in used_by.iter() {
                 let mut paths = match next_target {
                     UsedBy::Itself(used_by_type) => match used_by_type {
-                        UsedByType::NamedExport(name) => self.trace(
-                            graph,
-                            (
-                                module_symbol.0.clone(),
-                                TraceTarget::NamedExport(name.to_string()),
-                            ),
-                        )?,
-                        UsedByType::DefaultExport => self
-                            .trace(graph, (module_symbol.0.clone(), TraceTarget::DefaultExport))?,
-                        UsedByType::LocalVar(name) => self.trace(
-                            graph,
-                            (
-                                module_symbol.0.clone(),
-                                TraceTarget::LocalVar(name.to_string()),
-                            ),
-                        )?,
+                        UsedByType::NamedExport(name) => self.trace((
+                            module_symbol.0.clone(),
+                            TraceTarget::NamedExport(name.to_string()),
+                        ))?,
+                        UsedByType::DefaultExport => {
+                            self.trace((module_symbol.0.clone(), TraceTarget::DefaultExport))?
+                        }
+                        UsedByType::LocalVar(name) => self.trace((
+                            module_symbol.0.clone(),
+                            TraceTarget::LocalVar(name.to_string()),
+                        ))?,
                     },
                     UsedBy::Other(UsedByOther { by, by_type }) => match by_type {
-                        UsedByType::NamedExport(name) => self.trace(
-                            graph,
-                            (by.clone(), TraceTarget::NamedExport(name.to_string())),
-                        )?,
-                        UsedByType::DefaultExport => {
-                            self.trace(graph, (by.clone(), TraceTarget::DefaultExport))?
+                        UsedByType::NamedExport(name) => {
+                            self.trace((by.clone(), TraceTarget::NamedExport(name.to_string())))?
                         }
-                        UsedByType::LocalVar(name) => self
-                            .trace(graph, (by.clone(), TraceTarget::LocalVar(name.to_string())))?,
+                        UsedByType::DefaultExport => {
+                            self.trace((by.clone(), TraceTarget::DefaultExport))?
+                        }
+                        UsedByType::LocalVar(name) => {
+                            self.trace((by.clone(), TraceTarget::LocalVar(name.to_string())))?
+                        }
                     },
                 };
                 res.append(&mut paths);
@@ -391,14 +395,9 @@ mod tests {
             ]),
         };
 
-        let mut dt = DependencyTracker {
-            cache: HashMap::new(),
-        };
+        let mut dt = DependencyTracker::new(&graph);
         let paths = dt
-            .trace(
-                &graph,
-                (String::from("kirby"), TraceTarget::LocalVar(s!("Power"))),
-            )
+            .trace((String::from("kirby"), TraceTarget::LocalVar(s!("Power"))))
             .unwrap();
 
         println!("{:#?}", dt);
