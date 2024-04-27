@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
 use dependency_tracker::{
+    dependency_tracker::DependencyTracker,
     parser::parse,
     path_resolver::{PathResolver, ToCanonicalString},
     scheduler::ParserCandidateScheduler,
-    DependencyTracker,
 };
 
 const ROOT: &'static str = "./test-project/everybodyyyy/src";
