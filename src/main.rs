@@ -4,8 +4,9 @@ use dependency_tracker::{
     depend_on_graph::DependOnGraph,
     dependency_tracker::{DependencyTracker, TraceTarget},
     parser::parse,
-    path_resolver::{PathResolver, ToCanonicalString},
+    path_resolver::{PathResolver, ResolvePath, ToCanonicalString},
     scheduler::ParserCandidateScheduler,
+    spreadsheet::write_to_spreadsheet,
     used_by_graph::UsedByGraph,
 };
 
@@ -28,9 +29,10 @@ fn main() -> anyhow::Result<()> {
     let used_by_graph = UsedByGraph::from(&depend_on_graph);
     let mut dependency_tracker = DependencyTracker::new(&used_by_graph);
     let traced_paths = dependency_tracker.trace((
-        String::from("<module>"),
+        path_resolver.resolve_path("", "components/buttons/counter")?,
         TraceTarget::LocalVar(String::from("Counter")),
     ))?;
+    write_to_spreadsheet("./output.xlsx", &traced_paths);
 
     Ok(())
 }

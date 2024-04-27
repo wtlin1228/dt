@@ -12,3 +12,4 @@ swc_core = { version = "0.91", features = [
 ]}
 swc_ecma_parser = { version = "0.144", features = ["typescript"] }
 anyhow = "1"
+umya-spreadsheet = "1.2.3"

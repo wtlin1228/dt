@@ -5,6 +5,7 @@ pub mod dependency_tracker;
 pub mod parser;
 pub mod path_resolver;
 pub mod scheduler;
+pub mod spreadsheet;
 mod symbol_dependency_visitor;
 mod symbol_visitor;
 mod to_symbol_name;

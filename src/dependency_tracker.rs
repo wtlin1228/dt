@@ -10,7 +10,17 @@ pub enum TraceTarget {
     LocalVar(String),
 }
 
-type ModuleSymbol = (String, TraceTarget);
+impl TraceTarget {
+    pub fn to_string(&self) -> String {
+        match self {
+            TraceTarget::NamedExport(s) => s.to_owned(),
+            TraceTarget::DefaultExport => String::from("default"),
+            TraceTarget::LocalVar(s) => s.to_owned(),
+        }
+    }
+}
+
+pub type ModuleSymbol = (String, TraceTarget);
 
 #[derive(Debug)]
 pub struct DependencyTracker<'graph> {
