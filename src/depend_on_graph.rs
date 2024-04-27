@@ -7,11 +7,11 @@ use super::{
 };
 
 #[derive(Debug)]
-pub struct DependencyTracker {
+pub struct DependOnGraph {
     pub parsed_modules_table: HashMap<String, ParsedModule>,
 }
 
-impl DependencyTracker {
+impl DependOnGraph {
     pub fn new() -> Self {
         Self {
             parsed_modules_table: HashMap::new(),
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mut dt = DependencyTracker::new();
+        let mut dt = DependOnGraph::new();
         let path_resolver = SimplePathResolver;
         let hawk = ParsedModule {
             canonical_path: String::from("src/hawk"),
