@@ -6,7 +6,7 @@ Dependency Tracker is a tool written in Rust for tracing the dependency of JavaS
 
 This tool is currently used internally inside my own projects. So maybe some of the assumptions don't meet yours. Current assumptions are:
 
-1. every import is valid
+1. no invalid imports
 2. no circular dependency
 3. no string literal exports `export { myFunction as "my-function" };`
 4. no string literal imports `import { "string name" as alias } from "module-name";`
