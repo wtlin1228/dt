@@ -2,7 +2,7 @@
 
 Dependency Tracker is a tool written in Rust for tracing the dependency of JavaScript(TypeScript)'s symbols across the module boundaries. It could be helpful when you're dealing with a large project and trying to make some changes like refactoring shared UI library, updating i18n translation keys.
 
-[dependency-cruiser](https://github.com/sverweij/dependency-cruiser) is a good option tracking the module's dependency is enough for you. I myself will use `dependency-cruiser` in projects that are well-organized, since the module(packages)'s dependency is good enough. But instead, I hope you find `dependency-tracker` useful if you're looking for a more fine-grained dependency tracker.
+[dependency-cruiser](https://github.com/sverweij/dependency-cruiser) is a good option if tracking the module's dependency is enough for you. I myself will use `dependency-cruiser` in projects that are well-organized, since the module(packages)'s dependency is good enough. But, also, I hope you find `dependency-tracker` useful if you're looking for a more fine-grained dependency tracker.
 
 This tool is currently used internally inside my own projects. So maybe some of the assumptions don't meet yours. Current assumptions are:
 
