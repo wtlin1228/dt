@@ -59,8 +59,9 @@ fn main() -> anyhow::Result<()> {
 
     let used_by_graph = UsedByGraph::from(&depend_on_graph);
     let mut dependency_tracker = DependencyTracker::new(&used_by_graph);
+
+    let mut target_path_history = BasicHistory::new().max_entries(8).no_duplicates(true);
     loop {
-        let mut target_path_history = BasicHistory::new().max_entries(8).no_duplicates(true);
         let target_path = Input::with_theme(&ColorfulTheme::default())
             .with_prompt("Your module path")
             .history_with(&mut target_path_history)
