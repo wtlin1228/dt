@@ -13,3 +13,8 @@ swc_core = { version = "0.91", features = [
 swc_ecma_parser = { version = "0.144", features = ["typescript"] }
 anyhow = "1"
 umya-spreadsheet = "1.2.3"
+dialoguer = { version = "0.11.0", features = ["history"] }
+indicatif = "0.17.8"
+console = "0.15.8"
+clap = { version = "4.5.7", features = ["derive"] }
+rand = "0.8.5"

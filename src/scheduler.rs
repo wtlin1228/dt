@@ -70,6 +70,10 @@ impl ParserCandidateScheduler {
         scheduler
     }
 
+    pub fn get_total_remaining_candidate_count(&self) -> usize {
+        self.good_candidates.len() + self.blocked_candidates.len()
+    }
+
     pub fn get_one_candidate(&mut self) -> Option<Candidate> {
         self.good_candidates.pop_front()
     }

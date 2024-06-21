@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{bail, Context};
 use std::collections::HashMap;
 
 use super::used_by_graph::{UsedBy, UsedByGraph, UsedByOther, UsedByType};
@@ -36,11 +36,38 @@ impl<'graph> DependencyTracker<'graph> {
         }
     }
 
-    pub fn trace(
-        &mut self,
-        // graph: &UsedByGraph,
-        module_symbol: ModuleSymbol,
-    ) -> anyhow::Result<Vec<Vec<ModuleSymbol>>> {
+    pub fn validate_module_path(&self, module_path: &str) -> anyhow::Result<()> {
+        match self.graph.modules.contains_key(module_path) {
+            true => Ok(()),
+            false => bail!("module {} not found", module_path),
+        }
+    }
+
+    pub fn get_traceable_named_exports(&self, module_path: &str) -> anyhow::Result<Vec<&str>> {
+        Ok(self
+            .graph
+            .modules
+            .get(module_path)
+            .context(format!("module {} not found", module_path))?
+            .named_export_table
+            .keys()
+            .map(|s| s.as_str())
+            .collect::<Vec<&str>>())
+    }
+
+    pub fn get_traceable_local_variables(&self, module_path: &str) -> anyhow::Result<Vec<&str>> {
+        Ok(self
+            .graph
+            .modules
+            .get(module_path)
+            .context(format!("module {} not found", module_path))?
+            .local_variable_table
+            .keys()
+            .map(|s| s.as_str())
+            .collect::<Vec<&str>>())
+    }
+
+    pub fn trace(&mut self, module_symbol: ModuleSymbol) -> anyhow::Result<Vec<Vec<ModuleSymbol>>> {
         // early return if cached
         if let Some(cached) = self.cache.get(&module_symbol) {
             return Ok(cached.clone());
