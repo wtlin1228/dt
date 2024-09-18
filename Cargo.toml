@@ -1,16 +1,16 @@
 [package]
 name = "dependency-tracker"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
-swc_core = { version = "0.91", features = [
+swc_core = { version = "0.104.2", features = [
     "common", 
     "ecma_ast", 
     "ecma_visit",
     "ecma_plugin_transform"
 ]}
-swc_ecma_parser = { version = "0.144", features = ["typescript"] }
+swc_ecma_parser = { version = "0.150.0", features = ["typescript"] }
 anyhow = "1"
 umya-spreadsheet = "1.2.3"
 dialoguer = { version = "0.11.0", features = ["history"] }

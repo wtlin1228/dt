@@ -16,7 +16,7 @@ use swc_core::{
         visit::{FoldWith, VisitWith},
     },
 };
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsSyntax};
 
 pub fn parse(module_path: &str) -> anyhow::Result<ParsedModule> {
     let cm: Lrc<SourceMap> = Default::default();
@@ -35,7 +35,7 @@ fn parse_module(
         Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
 
     let lexer = Lexer::new(
-        Syntax::Typescript(TsConfig {
+        Syntax::Typescript(TsSyntax {
             tsx: true,
             decorators: false,
             dts: false,
@@ -125,7 +125,8 @@ mod tests {
     #[test]
     fn test_empty_input() {
         let cm: Lrc<SourceMap> = Default::default();
-        let fm: Lrc<SourceFile> = cm.new_source_file(FileName::Custom("test.js".into()), "".into());
+        let fm: Lrc<SourceFile> =
+            cm.new_source_file(Lrc::new(FileName::Custom("test.js".into())), "".into());
         let module: ParsedModule = parse_module("test.js", cm, fm).unwrap();
 
         assert_eq!(module.canonical_path, "test.js");
@@ -139,7 +140,7 @@ mod tests {
     fn test_anonymous_default_export_function() {
         let cm: Lrc<SourceMap> = Default::default();
         let fm: Lrc<SourceFile> = cm.new_source_file(
-            FileName::Custom("test.js".into()),
+            Lrc::new(FileName::Custom("test.js".into())),
             r#"
             let name1, name2;
             export default function () {
@@ -190,7 +191,7 @@ mod tests {
     fn test_anonymous_default_export_class() {
         let cm: Lrc<SourceMap> = Default::default();
         let fm: Lrc<SourceFile> = cm.new_source_file(
-            FileName::Custom("test.js".into()),
+            Lrc::new(FileName::Custom("test.js".into())),
             r#"
             let name1, name2;
             export default class {
@@ -243,7 +244,7 @@ mod tests {
     fn test_anonymous_default_export_object() {
         let cm: Lrc<SourceMap> = Default::default();
         let fm: Lrc<SourceFile> = cm.new_source_file(
-            FileName::Custom("test.js".into()),
+            Lrc::new(FileName::Custom("test.js".into())),
             r#"
             let name1, name2;
             export default { name1, name2 };
@@ -291,7 +292,7 @@ mod tests {
     fn test_anonymous_default_export_array() {
         let cm: Lrc<SourceMap> = Default::default();
         let fm: Lrc<SourceFile> = cm.new_source_file(
-            FileName::Custom("test.js".into()),
+            Lrc::new(FileName::Custom("test.js".into())),
             r#"
             let name1, name2;
             export default [name1, name2];
@@ -339,7 +340,7 @@ mod tests {
     fn test_complex_input() {
         let cm: Lrc<SourceMap> = Default::default();
         let fm: Lrc<SourceFile> = cm.new_source_file(
-            FileName::Custom("test.js".into()),
+            Lrc::new(FileName::Custom("test.js".into())),
             r#"
             import Kirby, { Power, Pink as KirbyPink, Puffy } from './kirby';
             import * as Hawk from './hawk';

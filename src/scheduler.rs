@@ -9,7 +9,7 @@ use swc_core::{
     ecma::visit::VisitWith,
 };
 use swc_core::{ecma::ast::*, ecma::visit::Visit};
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsSyntax};
 
 use crate::path_resolver::ToCanonicalString;
 
@@ -149,7 +149,7 @@ impl<'r> BlockedByVisitor<'r> {
             .expect(format!("failed to load {:?}", path).as_str());
 
         let lexer = Lexer::new(
-            Syntax::Typescript(TsConfig {
+            Syntax::Typescript(TsSyntax {
                 tsx: true,
                 decorators: false,
                 dts: false,

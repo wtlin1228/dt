@@ -550,10 +550,10 @@ macro_rules! parse_with_visitor {
         let cm: Lrc<SourceMap> = Default::default();
         let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
 
-        let fm = cm.new_source_file(FileName::Custom("test.js".into()), $input.into());
+        let fm = cm.new_source_file(Lrc::new(FileName::Custom("test.js".into())), $input.into());
 
         let lexer = Lexer::new(
-            Syntax::Typescript(TsConfig {
+            Syntax::Typescript(TsSyntax {
                 tsx: true,
                 decorators: false,
                 dts: false,
@@ -603,7 +603,7 @@ mod tests {
             visit::{FoldWith, VisitWith},
         },
     };
-    use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+    use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsSyntax};
 
     #[test]
     fn test_statements_are_handled() {
