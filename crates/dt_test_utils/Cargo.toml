@@ -1,0 +1,15 @@
+[package]
+authors     = ["Leo Lin <wtlin1228@gmail.com>"]
+description = "provide some shared utils for testing"
+edition     = "2021"
+name        = "dt_test_utils"
+version     = "0.1.0"
+
+
+[dependencies]
+anyhow          = { workspace = true }
+swc_core        = { workspace = true }
+swc_ecma_parser = { workspace = true }
+
+
+[dev-dependencies]
