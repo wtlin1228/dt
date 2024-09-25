@@ -1,7 +1,6 @@
 use anyhow::{bail, Context};
+use dt_graph::used_by_graph::{UsedBy, UsedByGraph, UsedByOther, UsedByType};
 use std::collections::HashMap;
-
-use super::used_by_graph::{UsedBy, UsedByGraph, UsedByOther, UsedByType};
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub enum TraceTarget {
@@ -141,10 +140,8 @@ impl<'graph> DependencyTracker<'graph> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::{
-        anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT, used_by_graph::Module,
-    };
+    use dt_graph::used_by_graph::Module;
+    use dt_parser::anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT;
 
     macro_rules! s {
         ($s:expr) => {{
