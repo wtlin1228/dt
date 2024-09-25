@@ -1,0 +1,13 @@
+[package]
+authors     = ["Leo Lin <wtlin1228@gmail.com>"]
+description = "resolve the path of import src in js modules"
+edition     = "2021"
+name        = "dt_path_resolver"
+version     = "0.1.0"
+
+
+[dependencies]
+anyhow = { workspace = true }
+
+
+[dev-dependencies]
