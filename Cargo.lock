@@ -565,17 +565,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "dependency-tracker"
-version = "0.1.1"
+name = "demo"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "console",
  "dialoguer",
+ "dt_core",
  "indicatif",
  "rand",
- "swc_core",
- "swc_ecma_parser",
  "umya-spreadsheet",
 ]
 
@@ -651,6 +650,74 @@ name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
+
+[[package]]
+name = "dt_core"
+version = "0.1.0"
+dependencies = [
+ "dt_graph",
+ "dt_parser",
+ "dt_path_resolver",
+ "dt_scheduler",
+ "dt_tracker",
+]
+
+[[package]]
+name = "dt_graph"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dt_parser",
+ "dt_path_resolver",
+ "dt_test_utils",
+]
+
+[[package]]
+name = "dt_parser"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dt_test_utils",
+ "swc_core",
+ "swc_ecma_parser",
+]
+
+[[package]]
+name = "dt_path_resolver"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
+name = "dt_scheduler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dt_path_resolver",
+ "swc_core",
+ "swc_ecma_parser",
+]
+
+[[package]]
+name = "dt_test_utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "swc_core",
+ "swc_ecma_parser",
+]
+
+[[package]]
+name = "dt_tracker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dt_graph",
+ "dt_parser",
+ "swc_core",
+ "swc_ecma_parser",
+]
 
 [[package]]
 name = "either"

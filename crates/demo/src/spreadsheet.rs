@@ -1,6 +1,6 @@
 use umya_spreadsheet::*;
 
-use super::dependency_tracker::ModuleSymbol;
+use dt_core::tracker::ModuleSymbol;
 
 pub fn write_to_spreadsheet(filename: &str, paths: &Vec<Vec<ModuleSymbol>>) {
     let mut book = new_file();

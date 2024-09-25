@@ -6,14 +6,13 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::path::PathBuf;
 
-use dependency_tracker::{
-    depend_on_graph::DependOnGraph,
-    dependency_tracker::{DependencyTracker, TraceTarget},
+use demo::spreadsheet::write_to_spreadsheet;
+use dt_core::{
+    graph::{depend_on_graph::DependOnGraph, used_by_graph::UsedByGraph},
     parser::parse,
-    path_resolver::{PathResolver, ResolvePath, ToCanonicalString},
+    path_resolver::{PathResolver, ToCanonicalString},
     scheduler::ParserCandidateScheduler,
-    spreadsheet::write_to_spreadsheet,
-    used_by_graph::UsedByGraph,
+    tracker::{DependencyTracker, TraceTarget},
 };
 
 const SYMBOL_TYPE_SELECTIONS: [&str; 3] = ["Default Export", "Named Export", "Local Variable"];
@@ -33,9 +32,10 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let mut scheduler = ParserCandidateScheduler::new(&PathBuf::from(&args.src));
-    let path_resolver = PathResolver::new(&PathBuf::from(&args.src).to_canonical_string()?);
-    let mut depend_on_graph = DependOnGraph::new();
+    let root = args.src;
+
+    let mut scheduler = ParserCandidateScheduler::new(&root);
+    let mut depend_on_graph = DependOnGraph::new(&root);
 
     let bar = ProgressBar::new(scheduler.get_total_remaining_candidate_count() as u64);
     bar.set_style(
@@ -48,7 +48,7 @@ fn main() -> anyhow::Result<()> {
         match scheduler.get_one_candidate() {
             Some(c) => {
                 let parsed_module = parse(c.to_str().unwrap())?;
-                depend_on_graph.add_parsed_module(parsed_module, &path_resolver)?;
+                depend_on_graph.add_parsed_module(parsed_module)?;
                 scheduler.mark_candidate_as_parsed(c);
                 bar.inc(1);
             }
@@ -60,6 +60,7 @@ fn main() -> anyhow::Result<()> {
     let used_by_graph = UsedByGraph::from(&depend_on_graph);
     let mut dependency_tracker = DependencyTracker::new(&used_by_graph);
 
+    let path_resolver = PathResolver::new(&PathBuf::from(&root).to_canonical_string()?);
     let mut target_path_history = BasicHistory::new().max_entries(8).no_duplicates(true);
     loop {
         let target_path = Input::with_theme(&ColorfulTheme::default())
