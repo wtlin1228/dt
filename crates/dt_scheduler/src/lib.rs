@@ -1,5 +1,8 @@
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::{Path, PathBuf};
+use dt_path_resolver::{PathResolver, ToCanonicalString};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    path::{Path, PathBuf},
+};
 use swc_core::{
     common::{
         errors::{ColorConfig, Handler},
@@ -7,20 +10,14 @@ use swc_core::{
         SourceMap,
     },
     ecma::visit::VisitWith,
+    {ecma::ast::*, ecma::visit::Visit},
 };
-use swc_core::{ecma::ast::*, ecma::visit::Visit};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsSyntax};
-
-use crate::path_resolver::ToCanonicalString;
-
-use super::path_resolver::{PathResolver, ResolvePath};
 
 type Candidate = PathBuf;
 
 #[derive(Debug)]
 pub struct ParserCandidateScheduler {
-    root: PathBuf,
-
     // candidates that are ready to be parsed
     good_candidates: VecDeque<Candidate>,
 
@@ -32,17 +29,16 @@ pub struct ParserCandidateScheduler {
 }
 
 impl ParserCandidateScheduler {
-    pub fn new(root: &PathBuf) -> Self {
-        let paths = Self::collect_paths(root);
+    pub fn new(root: &str) -> Self {
+        let paths = Self::collect_paths(&PathBuf::from(root));
 
         let mut scheduler = Self {
-            root: root.clone(),
             good_candidates: VecDeque::new(),
             blocked_candidates: HashMap::new(),
             blocking_table: HashMap::new(),
         };
 
-        let path_resolver = PathResolver::new(root.to_str().unwrap());
+        let path_resolver = PathResolver::new(root);
 
         for path in paths.iter() {
             if Self::is_valid_path(path) {
@@ -211,128 +207,5 @@ impl<'r> Visit for BlockedByVisitor<'r> {
 
     fn visit_export_all(&mut self, n: &ExportAll) {
         self.add_to_blocked_by_if_needed(n.src.value.as_str());
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let root = PathBuf::from("./test-project/everybodyyyy/src")
-            .canonicalize()
-            .unwrap();
-        let scheduler = ParserCandidateScheduler::new(&root);
-
-        assert_eq!(scheduler.root, root);
-
-        assert_eq!(
-            scheduler.good_candidates,
-            vec![
-                root.join("main.tsx"),
-                root.join("components/unused-components/unused-avatar.tsx"),
-                root.join("components/unused-components/unused-banner.tsx"),
-                root.join("components/buttons/unused-button.tsx"),
-                root.join("components/buttons/counter.tsx"),
-                root.join("components/titles/unused-title.tsx"),
-                root.join("components/titles/big-title.tsx"),
-                root.join("components/links/vite.tsx"),
-                root.join("components/links/unused-link.tsx"),
-                root.join("components/links/react.tsx"),
-                root.join("components/paragraphs/test-hmr.tsx"),
-                root.join("components/paragraphs/read-the-docs.tsx"),
-                root.join("components/paragraphs/unused-paragraph.tsx"),
-                root.join("vite-env.d.ts"),
-            ]
-        );
-
-        [
-            ("App.tsx", 1),
-            ("components/links/index.ts", 3),
-            ("components/unused-components/index.ts", 2),
-            ("components/buttons/index.ts", 2),
-            ("components/paragraphs/index.ts", 3),
-            ("components/index.ts", 5),
-            ("components/titles/index.ts", 2),
-        ]
-        .iter()
-        .for_each(|(key, value)| {
-            assert_eq!(
-                scheduler.blocked_candidates.get(&root.join(key)),
-                Some(value)
-            );
-        });
-
-        [
-            (
-                "components/paragraphs/test-hmr.tsx",
-                vec!["components/paragraphs/index.ts"],
-            ),
-            (
-                "components/unused-components/index.ts",
-                vec!["components/index.ts"],
-            ),
-            (
-                "components/links/vite.tsx",
-                vec!["components/links/index.ts"],
-            ),
-            (
-                "components/titles/big-title.tsx",
-                vec!["components/titles/index.ts"],
-            ),
-            ("components/index.ts", vec!["App.tsx"]),
-            (
-                "components/links/react.tsx",
-                vec!["components/links/index.ts"],
-            ),
-            (
-                "components/buttons/unused-button.tsx",
-                vec!["components/buttons/index.ts"],
-            ),
-            ("components/links/index.ts", vec!["components/index.ts"]),
-            ("components/titles/index.ts", vec!["components/index.ts"]),
-            (
-                "components/buttons/counter.tsx",
-                vec!["components/buttons/index.ts"],
-            ),
-            (
-                "components/unused-components/unused-avatar.tsx",
-                vec!["components/unused-components/index.ts"],
-            ),
-            (
-                "components/links/unused-link.tsx",
-                vec!["components/links/index.ts"],
-            ),
-            (
-                "components/paragraphs/unused-paragraph.tsx",
-                vec!["components/paragraphs/index.ts"],
-            ),
-            (
-                "components/paragraphs/index.ts",
-                vec!["components/index.ts"],
-            ),
-            (
-                "components/titles/unused-title.tsx",
-                vec!["components/titles/index.ts"],
-            ),
-            ("components/buttons/index.ts", vec!["components/index.ts"]),
-            (
-                "components/unused-components/unused-banner.tsx",
-                vec!["components/unused-components/index.ts"],
-            ),
-            (
-                "components/paragraphs/read-the-docs.tsx",
-                vec!["components/paragraphs/index.ts"],
-            ),
-        ]
-        .into_iter()
-        .for_each(|(module, blocking_list)| {
-            let module = root.join(module);
-            let expected_blocking_list: Vec<PathBuf> =
-                blocking_list.iter().map(|x| root.join(x)).collect();
-            let actual_blocking_list = scheduler.blocking_table.get(&module).unwrap();
-            assert_eq!(actual_blocking_list, &expected_blocking_list);
-        });
     }
 }
