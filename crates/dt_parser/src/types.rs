@@ -47,36 +47,3 @@ pub enum FromType {
     // - export * as A from 'some-module'
     Namespace,
 }
-
-#[cfg(test)]
-#[macro_export]
-macro_rules! assert_hash_map {
-    ($hash_map:expr, $(($key:expr, $value:expr)),*) => {{
-        let mut count = 0;
-        $(
-            count += 1;
-            assert_eq!($hash_map.get($key).unwrap(), &$value);
-        )*
-        assert_eq!($hash_map.len(), count);
-    }};
-
-    ($hash_map:expr, $(($key:expr, $value:expr),)*) => {{
-        $crate::assert_hash_map!($hash_map, $(($key, $value)),*)
-    }};
-}
-
-#[cfg(test)]
-#[macro_export]
-macro_rules! assert_tracked_ids {
-    ($visitor:expr, $expect:expr) => {{
-        let mut tracked_ids: Vec<&str> = $visitor
-            .tracked_ids
-            .iter()
-            .map(|(atom, _)| atom.as_str())
-            .collect();
-        tracked_ids.sort();
-        let mut expect = $expect;
-        expect.sort();
-        assert_eq!(tracked_ids, expect);
-    }};
-}

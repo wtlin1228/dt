@@ -1,10 +1,9 @@
+use crate::anonymous_default_export::get_anonymous_default_export_id;
 use std::collections::{HashMap, HashSet};
 use swc_core::ecma::{
     ast::*,
     visit::{Visit, VisitWith},
 };
-
-use super::anonymous_default_export::get_anonymous_default_export_id;
 
 #[derive(Debug)]
 pub struct SymbolDependencyVisitor {

@@ -1,10 +1,14 @@
 use super::{
-    common::ParsedModule, symbol_dependency_visitor::SymbolDependencyVisitor,
-    symbol_visitor::SymbolVisitor, to_symbol_name::ToSymbolName,
+    to_symbol_name::ToSymbolName,
+    types::ParsedModule,
+    visitors::{
+        construct_symbol_dependency::SymbolDependencyVisitor,
+        extract_module_scopped_symbols::ModuleScoppedSymbolsVisitor,
+    },
 };
 
 use anyhow::Context;
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 use swc_core::{
     common::{
         errors::{ColorConfig, Handler},
@@ -22,7 +26,7 @@ pub fn parse(module_path: &str) -> anyhow::Result<ParsedModule> {
     let cm: Lrc<SourceMap> = Default::default();
     let fm = cm
         .load_file(Path::new(module_path))
-        .expect(format!("failed to load {:?}", module_path).as_str());
+        .context(format!("failed to load {:?}", module_path))?;
     parse_module(module_path, cm, fm)
 }
 
@@ -33,7 +37,6 @@ fn parse_module(
 ) -> anyhow::Result<ParsedModule> {
     let handler: Handler =
         Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
-
     let lexer = Lexer::new(
         Syntax::Typescript(TsSyntax {
             tsx: true,
@@ -47,13 +50,10 @@ fn parse_module(
         StringInput::from(&*fm),
         None,
     );
-
     let mut parser = Parser::new_from(lexer);
-
     for e in parser.take_errors() {
         e.into_diagnostic(&handler).emit();
     }
-
     let module: swc_core::ecma::ast::Module = parser
         .parse_module()
         .map_err(|e| {
@@ -62,65 +62,58 @@ fn parse_module(
         })
         .expect("failed to parser module");
 
+    let module = GLOBALS.set(&Globals::new(), || {
+        // ref: https://rustdoc.swc.rs/swc_ecma_transforms_base/fn.resolver.html
+        module.fold_with(&mut resolver(Mark::new(), Mark::new(), true))
+    });
+
+    let mut symbol_visitor = ModuleScoppedSymbolsVisitor::new();
+    module.visit_with(&mut symbol_visitor);
+
+    let mut symbol_dependency_visitor = SymbolDependencyVisitor::new(symbol_visitor.tracked_ids);
+    module.visit_with(&mut symbol_dependency_visitor);
+
     let mut parsed_module = ParsedModule {
         canonical_path: module_src.to_string(),
-        local_variable_table: HashMap::new(),
-        named_export_table: HashMap::new(),
-        default_export: None,
-        re_export_star_from: None,
+        local_variable_table: symbol_visitor.local_variable_table,
+        named_export_table: symbol_visitor.named_export_table,
+        default_export: symbol_visitor.default_export,
+        re_export_star_from: match symbol_visitor.re_exporting_all_from.len() > 0 {
+            true => Some(symbol_visitor.re_exporting_all_from),
+            false => None,
+        },
     };
 
-    GLOBALS.set(&Globals::new(), || {
-        // ref: https://rustdoc.swc.rs/swc_ecma_transforms_base/fn.resolver.html
-        let module: swc_core::ecma::ast::Module =
-            module.fold_with(&mut resolver(Mark::new(), Mark::new(), true));
-
-        let mut symbol_visitor: SymbolVisitor = SymbolVisitor::new();
-        module.visit_with(&mut symbol_visitor);
-
-        parsed_module.default_export = symbol_visitor.default_export;
-        parsed_module.named_export_table = symbol_visitor.named_export_table;
-        parsed_module.local_variable_table = symbol_visitor.local_variable_table;
-        if symbol_visitor.re_exporting_all_from.len() > 0 {
-            parsed_module.re_export_star_from = Some(symbol_visitor.re_exporting_all_from);
+    for (key, value) in symbol_dependency_visitor.dependency.iter() {
+        if value.len() == 0 {
+            continue;
         }
 
-        let mut symbol_dependency_visitor: SymbolDependencyVisitor =
-            SymbolDependencyVisitor::new(symbol_visitor.tracked_ids);
-        module.visit_with(&mut symbol_dependency_visitor);
-
-        for (key, value) in symbol_dependency_visitor.dependency.iter() {
-            if value.len() == 0 {
-                continue;
-            }
-            let mut depend_on = Vec::with_capacity(value.len());
-            for d in value.iter() {
-                depend_on.push(d.to_symbol_name());
-            }
-            let local_variable = parsed_module
-                .local_variable_table
-                .get_mut(&key.to_symbol_name())
-                .context(format!("local variable {} not found", key.to_symbol_name()))
-                .unwrap();
-            depend_on.sort_unstable();
-            local_variable.depend_on = Some(depend_on);
+        let mut depend_on = Vec::with_capacity(value.len());
+        for d in value.iter() {
+            depend_on.push(d.to_symbol_name());
         }
-    });
+        depend_on.sort_unstable();
+
+        let local_variable = parsed_module
+            .local_variable_table
+            .get_mut(&key.to_symbol_name())
+            .context(format!("local variable {} not found", key.to_symbol_name()))?;
+        local_variable.depend_on = Some(depend_on);
+    }
 
     Ok(parsed_module)
 }
 
 #[cfg(test)]
 mod tests {
-    use swc_core::common::FileName;
-
+    use super::*;
     use crate::{
         anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
-        assert_hash_map,
-        common::{FromOtherModule, FromType, ModuleExport, ModuleScopedVariable},
+        types::{FromOtherModule, FromType, ModuleExport, ModuleScopedVariable},
     };
-
-    use super::*;
+    use dt_test_utils::assert_hash_map;
+    use swc_core::common::FileName;
 
     #[test]
     fn test_empty_input() {
