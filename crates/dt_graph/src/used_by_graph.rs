@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-
-use super::{
+use super::depend_on_graph::DependOnGraph;
+use dt_parser::{
     anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
-    common::{FromOtherModule, FromType, ModuleExport, ModuleScopedVariable},
-    depend_on_graph::DependOnGraph,
+    types::{FromOtherModule, FromType, ModuleExport, ModuleScopedVariable},
 };
+use std::collections::HashMap;
 
 // local variables can be used by:
 // - local variables

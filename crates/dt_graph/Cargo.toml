@@ -1,0 +1,17 @@
+[package]
+authors     = ["Leo Lin <wtlin1228@gmail.com>"]
+description = "construct the symbol dependency graph across multiple modules"
+edition     = "2021"
+name        = "dt_graph"
+version     = "0.1.0"
+
+
+[dependencies]
+anyhow = { workspace = true }
+
+dt_path_resolver = { version = "0.1.0", path = "../dt_path_resolver" }
+dt_parser        = { version = "0.1.0", path = "../dt_parser" }
+
+
+[dev-dependencies]
+dt_test_utils    = { version = "0.1.0", path = "../dt_test_utils" }
