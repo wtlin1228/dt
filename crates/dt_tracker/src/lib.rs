@@ -434,8 +434,6 @@ mod tests {
             .trace((String::from("kirby"), TraceTarget::LocalVar(s!("Power"))))
             .unwrap();
 
-        println!("{:#?}", dt);
-
         assert_eq!(
             paths,
             vec![
