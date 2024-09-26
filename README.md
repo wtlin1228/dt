@@ -17,15 +17,15 @@ Imagine an application with two routes: `/home` and `/account`.
 
 Here's what the dependencies for the home page might look like:
 
-![home page](./assets/home.png)
+![home page](./assets/home.webp)
 
 And here's the account page:
 
-![account page](./assets/account.png)
+![account page](./assets/account.webp)
 
 This application can be represented as a Directed Acyclic Graph (DAG), where the edges represent dependencies between symbols. For example, `A -> B` means that `Symbol A` depends on `Symbol B`. In this context, symbols are module-scoped identifiers—for instance, given `const Foo = 'foo'`, `Foo` would be a symbol.
 
-![DAG](./assets/dag.png)
+![DAG](./assets/dag.webp)
 
 For the design team, the key question might be: **How many pages will be affected if we change this component?**
 
@@ -37,19 +37,19 @@ By generating a DAG of all the symbols in your application, you can create a "su
 
 ### Adj+ = { FriendList }
 
-![friend list](./assets/friend-list.png)
+![friend list](./assets/friend-list.webp)
 
 ### Adj+ = { Avatar }
 
-![avatar](./assets/avatar.png)
+![avatar](./assets/avatar.webp)
 
 ### Adj+ = { UserProfileHeader, FriendList }
 
-![user profile header and friend list](./assets/user-profile-header-and-friend-list.png)
+![user profile header and friend list](./assets/user-profile-header-and-friend-list.webp)
 
 ### Adj+ = { Header, Avatar }
 
-![header and avatar](./assets/header-and-avatar.png)
+![header and avatar](./assets/header-and-avatar.webp)
 
 ## Design Overview
 
