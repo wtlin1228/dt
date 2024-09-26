@@ -1,22 +1,61 @@
 # Dependency Tracker
 
-Dependency Tracker is a tool written in Rust for tracing the dependency of JavaScript(TypeScript)'s symbols across the module boundaries. It could be helpful when you're dealing with a large project and trying to make some changes like refactoring shared UI library, updating i18n translation keys.
+Dependency Tracker is a Rust-based tool designed to trace symbol dependencies in JavaScript and TypeScript across module boundaries. It's especially useful for large projects where tasks like refactoring a shared UI library or updating i18n translation keys can become complex and time-consuming.
 
-[dependency-cruiser](https://github.com/sverweij/dependency-cruiser) is a good option if tracking the module's dependency is enough for you. I myself will use `dependency-cruiser` in projects that are well-organized, since the module(packages)'s dependency is good enough. But, also, I hope you find `dependency-tracker` useful if you're looking for a more fine-grained dependency tracker.
+If you're only interested in tracking module-level dependencies, you might prefer using [dependency-cruiser](https://github.com/sverweij/dependency-cruiser). I will also use it for projects that are well-organized, where understanding the relationships between modules (or packages) is enough. However, if you're looking for a tool with more fine-grained tracking at the symbol level, Dependency Tracker could be just what you need.
 
-This tool is currently used internally inside my own projects. So maybe some of the assumptions don't meet yours. Current assumptions are:
+Currently, this tool is used internally in my own projects, so some assumptions may not align with your project needs. These assumptions include:
 
 1. no invalid imports
 2. no circular dependency
 3. no string literal exports `export { myFunction as "my-function" };`
 4. no string literal imports `import { "string name" as alias } from "module-name";`
 
-# Overview
+## Problem Overview
+
+Imagine an application with two routes: `/home` and `/account`.
+
+Here's what the dependencies for the home page might look like:
+
+![home page](./assets/home.png)
+
+And here's the account page:
+
+![account page](./assets/account.png)
+
+This application can be represented as a Directed Acyclic Graph (DAG), where the edges represent dependencies between symbols. For example, `A -> B` means that `Symbol A` depends on `Symbol B`. In this context, symbols are module-scoped identifiers—for instance, given `const Foo = 'foo'`, `Foo` would be a symbol.
+
+![DAG](./assets/dag.png)
+
+For the design team, the key question might be: **How many pages will be affected if we change this component?**
+
+For the UX writing team, they might wonder: **How many pages will be affected if we update these translation keys?**
+
+In smaller applications, these questions are easy to answer. But as the project grows, answering them becomes much more time-consuming.
+
+By generating a DAG of all the symbols in your application, you can create a "super node" and use Dependency Tracker to trace all the dependent symbols (Adj+ from the super node). Then, if any symbol in the path is linked to a specific URL, you can collect those URLs and paths to map out the impact.
+
+### Adj+ = { FriendList }
+
+![friend list](./assets/friend-list.png)
+
+### Adj+ = { Avatar }
+
+![avatar](./assets/avatar.png)
+
+### Adj+ = { UserProfileHeader, FriendList }
+
+![user profile header and friend list](./assets/user-profile-header-and-friend-list.png)
+
+### Adj+ = { Header, Avatar }
+
+![header and avatar](./assets/header-and-avatar.png)
+
+## Design Overview
 
 ```mermaid
 flowchart TD
     source(JS/TS Project) --> scheduler(Scheduler)
-    path_resolver(Path Resolver) --> scheduler(Scheduler)
     scheduler(Scheduler) --> parser1(Parser)
     scheduler(Scheduler) --> parser2(Parser)
     scheduler(Scheduler) --> parser3(Parser)
@@ -34,6 +73,6 @@ flowchart TD
 - `Used-By Graph` reverses the edges from `Depend-on Graph`
 - `Dependency Tracker` tracks the symbol by traversing the `Used-By Graph`
 
-# Usage
+## Demo
 
-I'm working on a CLI. But you can try it now by cloning this repository and run `cargo run`.
+See the `demo` crate. You can run `cargo run -- -s ./test-project/everybodyyyy -d ~/tmp`
