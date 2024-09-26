@@ -2,7 +2,7 @@
 authors     = ["Leo Lin <wtlin1228@gmail.com>"]
 description = "parse and construct the symbol dependency inside a js module"
 edition     = "2021"
-name        = "dt_parser"
+name        = "dt_i18n"
 version     = "0.1.0"
 
 
@@ -11,6 +11,7 @@ anyhow          = { workspace = true }
 swc_core        = { workspace = true }
 swc_ecma_parser = { workspace = true }
 
+dt_parser = { version = "0.1.0", path = "../dt_parser" }
 
 [dev-dependencies]
 dt_test_utils = { version = "0.1.0", path = "../dt_test_utils" }

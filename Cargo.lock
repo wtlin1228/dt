@@ -673,6 +673,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dt_i18n"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dt_parser",
+ "dt_test_utils",
+ "swc_core",
+ "swc_ecma_parser",
+]
+
+[[package]]
 name = "dt_parser"
 version = "0.1.0"
 dependencies = [

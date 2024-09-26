@@ -3,6 +3,7 @@ members = [
     "crates/demo",
     "crates/dt_core",
     "crates/dt_graph",
+    "crates/dt_i18n",
     "crates/dt_parser",
     "crates/dt_path_resolver",
     "crates/dt_scheduler",
