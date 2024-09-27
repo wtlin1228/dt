@@ -3,7 +3,9 @@ use dt_parser::{
     anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
     types::{FromOtherModule, FromType, ModuleExport, ModuleScopedVariable},
 };
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use serde_json;
+use std::{cmp::Ordering, collections::HashMap};
 
 // local variables can be used by:
 // - local variables
@@ -38,35 +40,62 @@ use std::collections::HashMap;
 //       in 'some-module':
 //       export { default } from 'this-module' -> DefaultExport is used by DefaultExport of 'some-module'
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UsedByGraph {
     pub modules: HashMap<String, Module>,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Module {
     pub local_variable_table: HashMap<String, Option<Vec<UsedBy>>>,
     pub named_export_table: HashMap<String, Option<Vec<UsedBy>>>,
     pub default_export: Option<Vec<UsedBy>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub enum UsedBy {
     Itself(UsedByType),
     Other(UsedByOther),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq)]
 pub struct UsedByOther {
     pub by: String,
     pub by_type: UsedByType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq)]
 pub enum UsedByType {
     NamedExport(String),
     DefaultExport,
     LocalVar(String),
+}
+
+impl Ord for UsedByOther {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.by == other.by {
+            true => self.by_type.cmp(&other.by_type),
+            false => self.by.cmp(&other.by),
+        }
+    }
+}
+
+impl Ord for UsedByType {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (UsedByType::NamedExport(a), UsedByType::NamedExport(b)) => a.cmp(b),
+            (UsedByType::NamedExport(_), UsedByType::DefaultExport) => Ordering::Greater,
+            (UsedByType::NamedExport(_), UsedByType::LocalVar(_)) => Ordering::Greater,
+            (UsedByType::DefaultExport, UsedByType::NamedExport(_)) => Ordering::Less,
+            (UsedByType::DefaultExport, UsedByType::DefaultExport) => {
+                unreachable!("a module can't have two default export")
+            }
+            (UsedByType::DefaultExport, UsedByType::LocalVar(_)) => Ordering::Greater,
+            (UsedByType::LocalVar(_), UsedByType::NamedExport(_)) => Ordering::Less,
+            (UsedByType::LocalVar(_), UsedByType::DefaultExport) => Ordering::Less,
+            (UsedByType::LocalVar(a), UsedByType::LocalVar(b)) => a.cmp(b),
+        }
+    }
 }
 
 impl UsedByGraph {
@@ -269,5 +298,13 @@ impl UsedByGraph {
             }
         }
         used_by_graph
+    }
+
+    pub fn export(&self) -> anyhow::Result<String> {
+        Ok(serde_json::to_string(self)?)
+    }
+
+    pub fn import(exported: &str) -> anyhow::Result<Self> {
+        Ok(serde_json::from_str(exported)?)
     }
 }
