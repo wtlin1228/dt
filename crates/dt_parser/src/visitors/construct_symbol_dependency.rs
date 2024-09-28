@@ -126,6 +126,14 @@ impl Visit for SymbolDependencyVisitor {
                                 object_lit.visit_with(self);
                                 self.current_id = None;
                             }
+                            // export default () => { /* … * /};
+                            Expr::Arrow(arrow_expr) => {
+                                self.dependency
+                                    .insert(get_anonymous_default_export_id(), HashSet::new());
+                                self.current_id = Some(get_anonymous_default_export_id());
+                                arrow_expr.visit_with(self);
+                                self.current_id = None;
+                            }
                             _ => (),
                         }
                     }

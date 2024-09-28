@@ -484,6 +484,22 @@ impl Visit for ModuleScoppedSymbolsVisitor {
                                     SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
                                 ));
                             }
+                            // export default () => { /* … */ };
+                            // Use `SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT` for anonymous case.
+                            // This symbol name shouldn't be tracked since this symbol cannot be used else where
+                            // in this module.
+                            ast::Expr::Arrow(_) => {
+                                self.local_variable_table.insert(
+                                    SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                    ModuleScopedVariable {
+                                        depend_on: None,
+                                        import_from: None,
+                                    },
+                                );
+                                self.set_default_export(ModuleExport::Local(
+                                    SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string(),
+                                ));
+                            }
                             _ => (),
                         }
                     }
@@ -583,6 +599,7 @@ mod tests {
             r#"export default expression;"#,
             r#"export default [name1, name2, /* …, */ nameN];"#,
             r#"export default { name1, name2, /* …, */ nameN };"#,
+            r#"export default () => { /* … */ };"#,
             r#"export default function functionName() { /* … */ }"#,
             r#"export default class ClassName { /* … */ }"#,
             r#"export default function* generatorFunctionName() { /* … */ }"#,
@@ -596,7 +613,7 @@ mod tests {
             r#"export { import1 as name1, import2 as name2, /* …, */ variableN as nameN } from 'module-name';"#,
             r#"export { default, /* …, */ } from 'module-name';"#,
             r#"export { default as name1 } from 'module-name';"#,
-            //  Imports
+            // Imports
             r#"import defaultExport from 'module-name';"#,
             r#"import * as name from 'module-name';"#,
             r#"import { export1 } from 'module-name';"#,
@@ -887,6 +904,34 @@ mod tests {
     #[test]
     fn test_exporting_default_object() {
         let input = r#"export default { name1, name2, /* …, */ nameN };"#;
+        let mut visitor = ModuleScoppedSymbolsVisitor::new();
+        let module = parse_module(input).unwrap();
+        module.visit_with(&mut visitor);
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert_eq!(
+            visitor.default_export,
+            Some(ModuleExport::Local(
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT.to_string()
+            ))
+        );
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: None
+                }
+            ),
+        );
+        assert_eq!(visitor.tracked_ids.len(), 0);
+    }
+
+    #[test]
+    fn test_exporting_default_arrow_function() {
+        let input = r#"export default () => { /* … */ };"#;
         let mut visitor = ModuleScoppedSymbolsVisitor::new();
         let module = parse_module(input).unwrap();
         module.visit_with(&mut visitor);
