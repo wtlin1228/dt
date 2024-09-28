@@ -8,12 +8,12 @@ version     = "0.1.0"
 
 [dependencies]
 anyhow = { workspace = true }
+clap   = { workspace = true }
 
 umya-spreadsheet = "1.2.3"
 dialoguer        = { version = "0.11.0", features = ["history"] }
 indicatif        = "0.17.8"
 console          = "0.15.8"
-clap             = { version = "4.5.7", features = ["derive"] }
 rand             = "0.8.5"
 
 dt_core = { version = "0.1.0", path = "../dt_core" }

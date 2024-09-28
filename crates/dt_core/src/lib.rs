@@ -2,12 +2,20 @@ pub mod graph {
     pub use dt_graph::*;
 }
 
+pub mod i18n {
+    pub use dt_i18n::*;
+}
+
 pub mod parser {
     pub use dt_parser::*;
 }
 
 pub mod path_resolver {
     pub use dt_path_resolver::*;
+}
+
+pub mod portable {
+    pub use dt_portable::*;
 }
 
 pub mod scheduler {

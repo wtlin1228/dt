@@ -8,7 +8,9 @@ version     = "0.1.0"
 
 [dependencies]
 dt_graph         = { version = "0.1.0", path = "../dt_graph" }
+dt_i18n          = { version = "0.1.0", path = "../dt_i18n" }
 dt_parser        = { version = "0.1.0", path = "../dt_parser" }
 dt_path_resolver = { version = "0.1.0", path = "../dt_path_resolver" }
+dt_portable      = { version = "0.1.0", path = "../dt_portable" }
 dt_scheduler     = { version = "0.1.0", path = "../dt_scheduler" }
 dt_tracker       = { version = "0.1.0", path = "../dt_tracker" }

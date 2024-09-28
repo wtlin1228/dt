@@ -1,0 +1,14 @@
+[package]
+authors     = ["Leo Lin <wtlin1228@gmail.com>"]
+description = "define the structure of portable file"
+edition     = "2021"
+name        = "dt_portable"
+version     = "0.1.0"
+
+
+[dependencies]
+anyhow     = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+
+dt_graph = { version = "0.1.0", path = "../dt_graph" }

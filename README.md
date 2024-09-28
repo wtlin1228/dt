@@ -75,4 +75,8 @@ flowchart TD
 
 ## Demo
 
-See the `demo` crate. You can run `cargo run -- -s ./test-project/everybodyyyy -d ~/tmp`
+See the `demo` crate. You can run `cargo run --bin demo -- -s ./test-project/everybodyyyy -d ~/tmp`.
+
+## Portable
+
+See the `dt_cli` crate. You can run `cargo run --bin dt_cli -- -i <INPUT> -o <OUTPUT>`.
