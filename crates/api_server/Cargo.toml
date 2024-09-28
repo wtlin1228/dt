@@ -1,0 +1,16 @@
+[package]
+authors     = ["Leo Lin <wtlin1228@gmail.com>"]
+description = "run the tracker and provide APIs"
+edition     = "2021"
+name        = "api_server"
+version     = "0.1.0"
+
+
+[dependencies]
+anyhow = { workspace = true }
+serde  = { workspace = true }
+
+actix-web  = "4"
+actix-cors = "0.7"
+
+dt_core = { version = "0.1.0", path = "../dt_core" }

@@ -1,5 +1,6 @@
 use anyhow::{bail, Context};
 use dt_graph::used_by_graph::{UsedBy, UsedByGraph, UsedByOther, UsedByType};
+use serde::Serialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
@@ -16,6 +17,15 @@ impl TraceTarget {
             TraceTarget::DefaultExport => String::from("default"),
             TraceTarget::LocalVar(s) => s.to_owned(),
         }
+    }
+}
+
+impl Serialize for TraceTarget {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }
 

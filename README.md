@@ -80,3 +80,9 @@ See the `demo` crate. You can run `cargo run --bin demo -- -s ./test-project/eve
 ## Portable
 
 See the `cli` crate. You can run `cargo run --bin cli -- -i <INPUT> -o <OUTPUT>`.
+
+## Web
+
+You have to run the `api_server` with one of your portable, then you can use the web for searching.
+
+This feature is made for non-technical folks 💆‍♀️.
