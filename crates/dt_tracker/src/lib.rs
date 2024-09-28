@@ -25,13 +25,15 @@ pub type ModuleSymbol = (String, TraceTarget);
 pub struct DependencyTracker<'graph> {
     cache: HashMap<ModuleSymbol, Vec<Vec<ModuleSymbol>>>,
     graph: &'graph UsedByGraph,
+    trace_full_path_only: bool,
 }
 
 impl<'graph> DependencyTracker<'graph> {
-    pub fn new(graph: &'graph UsedByGraph) -> Self {
+    pub fn new(graph: &'graph UsedByGraph, trace_full_path_only: bool) -> Self {
         Self {
             cache: HashMap::new(),
             graph,
+            trace_full_path_only,
         }
     }
 
@@ -127,8 +129,17 @@ impl<'graph> DependencyTracker<'graph> {
         for path in res.iter_mut() {
             path.push(module_symbol.clone());
         }
-        // append a new path for this target only
-        res.push(vec![module_symbol.clone()]);
+        if self.trace_full_path_only {
+            // because we only want to trace the full path, we only need to add a new path
+            // when this ModuleSymbol is not using by anyone.
+            if res.len() == 0 {
+                res.push(vec![module_symbol.clone()]);
+            }
+        } else {
+            // always append the current ModuleSymbol since we want to list every single path
+            // that is reachable from the target.
+            res.push(vec![module_symbol.clone()]);
+        }
 
         // update cache
         self.cache.insert(module_symbol.clone(), res.clone());
@@ -429,7 +440,7 @@ mod tests {
             ]),
         };
 
-        let mut dt = DependencyTracker::new(&graph);
+        let mut dt = DependencyTracker::new(&graph, false);
         let paths = dt
             .trace((String::from("kirby"), TraceTarget::LocalVar(s!("Power"))))
             .unwrap();

@@ -58,7 +58,7 @@ fn main() -> anyhow::Result<()> {
     bar.finish_with_message("all modules parsed 🌲");
 
     let used_by_graph = UsedByGraph::from(&depend_on_graph);
-    let mut dependency_tracker = DependencyTracker::new(&used_by_graph);
+    let mut dependency_tracker = DependencyTracker::new(&used_by_graph, false);
 
     let path_resolver = PathResolver::new(&PathBuf::from(&root).to_canonical_string()?);
     let mut target_path_history = BasicHistory::new().max_entries(8).no_duplicates(true);

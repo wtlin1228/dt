@@ -40,12 +40,12 @@ use std::{cmp::Ordering, collections::HashMap};
 //       in 'some-module':
 //       export { default } from 'this-module' -> DefaultExport is used by DefaultExport of 'some-module'
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UsedByGraph {
     pub modules: HashMap<String, Module>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Module {
     pub local_variable_table: HashMap<String, Option<Vec<UsedBy>>>,
     pub named_export_table: HashMap<String, Option<Vec<UsedBy>>>,
