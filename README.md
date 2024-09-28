@@ -79,4 +79,4 @@ See the `demo` crate. You can run `cargo run --bin demo -- -s ./test-project/eve
 
 ## Portable
 
-See the `dt_cli` crate. You can run `cargo run --bin dt_cli -- -i <INPUT> -o <OUTPUT>`.
+See the `cli` crate. You can run `cargo run --bin cli -- -i <INPUT> -o <OUTPUT>`.

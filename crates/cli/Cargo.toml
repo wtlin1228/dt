@@ -2,7 +2,7 @@
 authors     = ["Leo Lin <wtlin1228@gmail.com>"]
 description = "CLI"
 edition     = "2021"
-name        = "dt_cli"
+name        = "cli"
 version     = "0.1.0"
 
 
