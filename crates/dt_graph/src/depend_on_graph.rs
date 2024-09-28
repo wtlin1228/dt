@@ -87,6 +87,20 @@ impl DependOnGraph {
                 }
             }
         }
+        if let Some(default_export) = parsed_module.default_export.as_mut() {
+            match default_export {
+                ModuleExport::Local(_) => (),
+                ModuleExport::ReExportFrom(ref mut from_other_module) => {
+                    match self
+                        .path_resolver
+                        .resolve_path(&parsed_module.canonical_path, &from_other_module.from)
+                    {
+                        Ok(resolved_path) => from_other_module.from = resolved_path,
+                        Err(_) => (),
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
