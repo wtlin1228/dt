@@ -73,15 +73,125 @@ flowchart TD
 - `Used-By Graph` reverses the edges from `Depend-on Graph`
 - `Dependency Tracker` tracks the symbol by traversing the `Used-By Graph`
 
-## Demo
+## Libraries
+
+### Core
+
+reexport all the library crates:
+
+- graph
+- i18n
+- parser
+- path_resolver
+- portable
+- scheduler
+- tracker
+
+### Graph
+
+`DependOnGraph` takes the parsed modules one by one to construct a DAG. You have to add the parsed module by topological order so that `DependOnGraph` can handle the wildcard import and export for you.
+
+```rs
+let mut depend_on_graph = DependOnGraph::new("<project_root>");
+depend_on_graph.add_parsed_module(parse("<module_path_1>").unwrap());
+depend_on_graph.add_parsed_module(parse("<module_path_2>").unwrap());
+```
+
+`UsedByGraph` takes a `DependOnGraph` instance and reverse the edges. `UsedByGraph` is serializable so you can construct once and distribute it to other users, it also useful if you want to have multiple `UsedByGraph` for different versions of your applications.
+
+```rs
+let used_by_graph = UsedByGraph::from(&depend_on_graph);
+
+let serialized = used_by_graph.export().unwrap();
+let used_by_graph = UsedByGraph::import(serialized).unwrap();
+```
+
+### I18n
+
+⚠️ Please check the tests in this crate to check if it is suitable for your projects.
+
+`collect_all_translation_usage` takes the project root and output the usage of i18n keys.
+
+```rs
+let i18n_usages = collect_all_translation_usage("<project_root>").unwrap();
+```
+
+### Parser
+
+`parse` takes a module path and returns a `ParsedModule`. If you are curious about what will be parsed as a symbol, check this [test](/crates/dt_parser/src/visitors/extract_module_scopped_symbols.rs#L582-L650).
+
+```rs
+let parsed_module = parse("<module_path>").unwrap();
+```
+
+### Path Resolver
+
+`PathResolver` provide a very simple `resolve_path()` to resolve the import path based on this order:
+
+- `<import_src>/index.js`
+- `<import_src>/index.ts`
+- `<import_src>.ts`
+- `<import_src>.tsx`
+- `<import_src>.js`
+- `<import_src>.jsx`
+
+```rs
+let path_resolver = PathResolver::new("<project_root>");
+let import_module_path = path_resolver.resolve_path("<current_module_path>", "<import_src>").unwrap();
+```
+
+### Portable
+
+`Portable` defines the structure of the portable files.
+
+```rs
+let portable = Portable::new(i18n_usages, used_by_graph);
+let serialized = portable.export().unwrap();
+let portable = Portable::import(serialized).unwrap();
+```
+
+### Scheduler
+
+`Scheduler` gives you the module path by topological order. It will check the wildcard exports and namespace imports. If A does wildcard exports or namespace imports from B, then B will be returned before A.
+
+```rs
+let mut scheduler = ParserCandidateScheduler::new("<project_root>");
+loop {
+    match scheduler.get_one_candidate() {
+        Some(module_path) => {
+            // parse this module and add it into the depend-on graph
+            scheduler.mark_candidate_as_parsed(module_path);
+        }
+        None => break,
+    }
+}
+```
+
+### Tracker
+
+`DependencyTracker` traces all the symbol dependency paths for you.
+
+```rs
+let mut dt = DependencyTracker::new(&used_by_graph, false);
+// trace the default export of this module
+let paths = dt.trace("<module_path>", TraceTarget::DefaultExport).unwrap();
+// trace the named export of this module
+let paths = dt.trace("<module_path>", TraceTarget::NamedExport("exported_name")).unwrap();
+// trace the local variable of this module
+let paths = dt.trace("<module_path>", TraceTarget::LocalVar("variable_name")).unwrap();
+```
+
+## Binaries
+
+### Demo
 
 See the `demo` crate. You can run `cargo run --bin demo -- -s ./test-project/everybodyyyy -d ~/tmp`.
 
-## Portable
+### Portable
 
 See the `cli` crate. You can run `cargo run --bin cli -- -i <INPUT> -o <OUTPUT>`.
 
-## Web
+## Client
 
 You have to run the `api_server` with one of your portable, then you can use the web for searching.
 
