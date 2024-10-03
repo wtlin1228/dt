@@ -4,7 +4,10 @@ use crate::{
     types::{FromOtherModule, FromType, ModuleExport, ModuleScopedVariable},
 };
 use std::collections::{HashMap, HashSet};
-use swc_core::ecma::{ast, visit::Visit};
+use swc_core::ecma::{
+    ast::{self, ArrowExpr, ExprOrSpread, VarDeclarator},
+    visit::Visit,
+};
 
 #[derive(Debug)]
 pub struct ModuleScoppedSymbolsVisitor {
@@ -537,9 +540,20 @@ impl Visit for ModuleScoppedSymbolsVisitor {
                                     // const name1 = value1;
                                     // const name1 = value1, name2 = value2;
                                     // const name1 = value1, name2 = value2, /* …, */ nameN = valueN;
+                                    // const name = lazyLoad(() => import('module-name'));
                                     ast::Pat::Ident(ast::BindingIdent { id, .. }) => {
                                         self.track_id(id);
-                                        self.add_module_scoped_variable(id, None, None);
+                                        match get_internal_lazyload_import_src(decl) {
+                                            Some(import_src) => self.add_module_scoped_variable(
+                                                id,
+                                                None,
+                                                Some(FromOtherModule {
+                                                    from: import_src,
+                                                    from_type: FromType::Default,
+                                                }),
+                                            ),
+                                            None => self.add_module_scoped_variable(id, None, None),
+                                        };
                                     }
                                     ast::Pat::Array(_) => (),
                                     ast::Pat::Rest(_) => (),
@@ -556,6 +570,57 @@ impl Visit for ModuleScoppedSymbolsVisitor {
                 },
             }
         }
+    }
+}
+
+// if `const name = lazyLoad(() => import('module-name'));`, returns
+//  - Some("module-name")
+//  - None, otherwise
+fn get_internal_lazyload_import_src(var_decl: &VarDeclarator) -> Option<String> {
+    match &var_decl.init {
+        Some(expr) => match &**expr {
+            ast::Expr::Call(call_expr) => {
+                match &call_expr.callee {
+                    ast::Callee::Expr(expr) => match &**expr {
+                        ast::Expr::Ident(ident) => {
+                            if ident.sym != "lazyLoad" {
+                                return None;
+                            }
+                        }
+                        _ => return None,
+                    },
+                    _ => return None,
+                };
+
+                match &call_expr.args.get(0) {
+                    Some(ExprOrSpread { expr, .. }) => match &**expr {
+                        ast::Expr::Arrow(ArrowExpr { body, .. }) => match &**body {
+                            ast::BlockStmtOrExpr::Expr(expr) => match &**expr {
+                                ast::Expr::Call(call_expr) => match &call_expr.callee {
+                                    ast::Callee::Import(_) => match &call_expr.args.get(0) {
+                                        Some(ExprOrSpread { expr, .. }) => match &**expr {
+                                            ast::Expr::Lit(lit) => match lit {
+                                                ast::Lit::Str(s) => Some(s.value.to_string()),
+                                                _ => None,
+                                            },
+                                            _ => None,
+                                        },
+                                        None => None,
+                                    },
+                                    _ => None,
+                                },
+                                _ => None,
+                            },
+                            _ => None,
+                        },
+                        _ => None,
+                    },
+                    None => None,
+                }
+            }
+            _ => None,
+        },
+        None => None,
     }
 }
 
@@ -641,6 +706,8 @@ mod tests {
             r#"async function* name(param0) { /* … */ }"#,
             r#"class name { /* … */ }"#,
             r#"class name extends otherName { /* … */ }"#,
+            // Internal-used only statements
+            r#"const name = lazyLoad(() => import('module-name'));"#,
         ];
         inputs.iter().for_each(|&input| {
             let mut visitor = ModuleScoppedSymbolsVisitor::new();
@@ -1919,6 +1986,32 @@ mod tests {
                 ModuleScopedVariable {
                     depend_on: None,
                     import_from: None
+                }
+            ),
+        );
+        assert_tracked_ids!(visitor, ["name"]);
+    }
+
+    #[test]
+    fn test_internal_used_only_lazyload() {
+        let input = r#"const name = lazyLoad(() => import('module-name'));"#;
+        let mut visitor = ModuleScoppedSymbolsVisitor::new();
+        let module = parse_module(input).unwrap();
+        module.visit_with(&mut visitor);
+
+        assert_eq!(visitor.re_exporting_all_from.len(), 0);
+        assert_eq!(visitor.named_export_table.len(), 0);
+        assert!(visitor.default_export.is_none());
+        assert_hash_map!(
+            visitor.local_variable_table,
+            (
+                "name",
+                ModuleScopedVariable {
+                    depend_on: None,
+                    import_from: Some(FromOtherModule {
+                        from: String::from("module-name"),
+                        from_type: FromType::Default
+                    })
                 }
             ),
         );

@@ -1,6 +1,6 @@
 [package]
 authors     = ["Leo Lin <wtlin1228@gmail.com>"]
-description = "parse and construct the symbol dependency inside a js module"
+description = "find the usages of i18n keys"
 edition     = "2021"
 name        = "dt_i18n"
 version     = "0.1.0"
