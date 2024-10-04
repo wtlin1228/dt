@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub struct ParsedModule {
+pub struct SymbolDependency {
     pub canonical_path: String,
     pub local_variable_table: HashMap<String, ModuleScopedVariable>,
     pub named_export_table: HashMap<String, ModuleExport>,

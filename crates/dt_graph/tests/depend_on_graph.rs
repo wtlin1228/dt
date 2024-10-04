@@ -1,6 +1,6 @@
 use dt_graph::depend_on_graph::DependOnGraph;
 use dt_parser::types::{
-    FromOtherModule, FromType, ModuleExport, ModuleScopedVariable, ParsedModule,
+    FromOtherModule, FromType, ModuleExport, ModuleScopedVariable, SymbolDependency,
 };
 use dt_path_resolver::ToCanonicalString;
 use dt_test_utils::assert_hash_map;
@@ -28,7 +28,7 @@ fn add_two_modules() {
         .unwrap();
 
     let mut dt = DependOnGraph::new(root);
-    let hawk = ParsedModule {
+    let hawk = SymbolDependency {
         canonical_path: canonical_path_hawk.clone(),
         local_variable_table: HashMap::from([(
             String::from("RedDemon"),
@@ -56,9 +56,9 @@ fn add_two_modules() {
         default_export: None,
         re_export_star_from: None,
     };
-    dt.add_parsed_module(hawk).unwrap();
-    assert_eq!(dt.parsed_modules_table.len(), 1);
-    let hawk = dt.parsed_modules_table.get(&canonical_path_hawk).unwrap();
+    dt.add_symbol_dependency(hawk).unwrap();
+    assert_eq!(dt.table.len(), 1);
+    let hawk = dt.table.get(&canonical_path_hawk).unwrap();
     assert_hash_map!(
         hawk.local_variable_table,
         (
@@ -87,16 +87,16 @@ fn add_two_modules() {
         )
     );
 
-    let kirby = ParsedModule {
+    let kirby = SymbolDependency {
         canonical_path: canonical_path_kirby.clone(),
         local_variable_table: HashMap::new(),
         named_export_table: HashMap::new(),
         default_export: None,
         re_export_star_from: Some(vec![String::from("hawk")]),
     };
-    dt.add_parsed_module(kirby).unwrap();
-    assert_eq!(dt.parsed_modules_table.len(), 2);
-    let kirby = dt.parsed_modules_table.get(&canonical_path_kirby).unwrap();
+    dt.add_symbol_dependency(kirby).unwrap();
+    assert_eq!(dt.table.len(), 2);
+    let kirby = dt.table.get(&canonical_path_kirby).unwrap();
     assert_eq!(kirby.local_variable_table.len(), 0);
     assert_eq!(kirby.re_export_star_from, None);
     assert_hash_map!(

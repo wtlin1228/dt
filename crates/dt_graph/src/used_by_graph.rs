@@ -101,13 +101,13 @@ impl Ord for UsedByType {
 impl UsedByGraph {
     fn new(depend_on_graph: &DependOnGraph) -> Self {
         let mut modules: HashMap<String, Module> = HashMap::new();
-        for (module_id, parsed_module) in depend_on_graph.parsed_modules_table.iter() {
+        for (module_id, symbol_dependency) in depend_on_graph.table.iter() {
             let mut local_variable_table: HashMap<String, Option<Vec<UsedBy>>> = HashMap::new();
-            for (symbol_name, _) in parsed_module.local_variable_table.iter() {
+            for (symbol_name, _) in symbol_dependency.local_variable_table.iter() {
                 local_variable_table.insert(symbol_name.to_owned(), None);
             }
             let mut named_export_table: HashMap<String, Option<Vec<UsedBy>>> = HashMap::new();
-            for (exported_name, _) in parsed_module.named_export_table.iter() {
+            for (exported_name, _) in symbol_dependency.named_export_table.iter() {
                 named_export_table.insert(exported_name.to_owned(), None);
             }
             modules.insert(
@@ -187,14 +187,14 @@ impl UsedByGraph {
 
     pub fn from(depend_on_graph: &DependOnGraph) -> Self {
         let mut used_by_graph = Self::new(depend_on_graph);
-        for (module_id, parsed_module) in depend_on_graph.parsed_modules_table.iter() {
+        for (module_id, symbol_dependency) in depend_on_graph.table.iter() {
             for (
                 symbol_name,
                 ModuleScopedVariable {
                     depend_on,
                     import_from,
                 },
-            ) in parsed_module.local_variable_table.iter()
+            ) in symbol_dependency.local_variable_table.iter()
             {
                 if let Some(depend_on) = depend_on {
                     let used_by = UsedBy::Itself(UsedByType::LocalVar(symbol_name.to_owned()));
@@ -228,7 +228,7 @@ impl UsedByGraph {
                     }
                 }
             }
-            for (exported_name, module_export) in parsed_module.named_export_table.iter() {
+            for (exported_name, module_export) in symbol_dependency.named_export_table.iter() {
                 match module_export {
                     ModuleExport::Local(symbol_name) => {
                         let used_by =
@@ -263,7 +263,7 @@ impl UsedByGraph {
                     }
                 }
             }
-            if let Some(default_export) = parsed_module.default_export.as_ref() {
+            if let Some(default_export) = symbol_dependency.default_export.as_ref() {
                 match default_export {
                     ModuleExport::Local(symbol_name) => {
                         let used_by = UsedBy::Itself(UsedByType::DefaultExport);

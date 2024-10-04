@@ -2,7 +2,10 @@ use dt_graph::{
     depend_on_graph::DependOnGraph,
     used_by_graph::{UsedBy, UsedByGraph, UsedByOther, UsedByType},
 };
-use dt_parser::{anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT, parse};
+use dt_parser::{
+    anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT, collect_symbol_dependency,
+    types::SymbolDependency, Input,
+};
 use dt_path_resolver::ToCanonicalString;
 use std::path::PathBuf;
 
@@ -41,6 +44,12 @@ macro_rules! assert_used_by_table {
     }};
 }
 
+fn parse(module_path: &str) -> anyhow::Result<SymbolDependency> {
+    let module_ast = Input::Path(module_path).get_module_ast()?;
+    let symbol_dependency = collect_symbol_dependency(&module_ast, module_path)?;
+    Ok(symbol_dependency)
+}
+
 #[test]
 fn picnic_time() {
     let root = "tests/fixture/used_by";
@@ -59,19 +68,19 @@ fn picnic_time() {
             .unwrap()
     });
     depend_on_graph
-        .add_parsed_module(parse(&happy_path).unwrap())
+        .add_symbol_dependency(parse(&happy_path).unwrap())
         .unwrap();
     depend_on_graph
-        .add_parsed_module(parse(&hawk_path).unwrap())
+        .add_symbol_dependency(parse(&hawk_path).unwrap())
         .unwrap();
     depend_on_graph
-        .add_parsed_module(parse(&kirby_path).unwrap())
+        .add_symbol_dependency(parse(&kirby_path).unwrap())
         .unwrap();
     depend_on_graph
-        .add_parsed_module(parse(&wild_path).unwrap())
+        .add_symbol_dependency(parse(&wild_path).unwrap())
         .unwrap();
     depend_on_graph
-        .add_parsed_module(parse(&picnic_time_path).unwrap())
+        .add_symbol_dependency(parse(&picnic_time_path).unwrap())
         .unwrap();
     let used_by_graph = UsedByGraph::from(&depend_on_graph);
 
@@ -328,19 +337,19 @@ fn export_and_import() {
             .unwrap()
     });
     depend_on_graph
-        .add_parsed_module(parse(&happy_path).unwrap())
+        .add_symbol_dependency(parse(&happy_path).unwrap())
         .unwrap();
     depend_on_graph
-        .add_parsed_module(parse(&hawk_path).unwrap())
+        .add_symbol_dependency(parse(&hawk_path).unwrap())
         .unwrap();
     depend_on_graph
-        .add_parsed_module(parse(&kirby_path).unwrap())
+        .add_symbol_dependency(parse(&kirby_path).unwrap())
         .unwrap();
     depend_on_graph
-        .add_parsed_module(parse(&wild_path).unwrap())
+        .add_symbol_dependency(parse(&wild_path).unwrap())
         .unwrap();
     depend_on_graph
-        .add_parsed_module(parse(&picnic_time_path).unwrap())
+        .add_symbol_dependency(parse(&picnic_time_path).unwrap())
         .unwrap();
     let picnic_time_graph = UsedByGraph::from(&depend_on_graph);
 

@@ -64,7 +64,9 @@ async fn search(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // TODO: get portable path from args
-    let mut file = File::open("<the portable path>")?;
+    // let mut file = File::open("<the portable path>")?;
+    let mut file =
+        File::open("/Users/linweitang/rust/js-symbol-dependency-tracker/outputs/sample.json")?;
     let mut exported = String::new();
     file.read_to_string(&mut exported)?;
     let portable = Portable::import(&exported).unwrap();

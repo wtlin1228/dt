@@ -89,12 +89,12 @@ reexport all the library crates:
 
 ### Graph
 
-`DependOnGraph` takes the parsed modules one by one to construct a DAG. You have to add the parsed module by topological order so that `DependOnGraph` can handle the wildcard import and export for you.
+`DependOnGraph` takes the `SymbolDependency` one by one to construct a DAG. You have to add the `SymbolDependency` by topological order so that `DependOnGraph` can handle the wildcard import and export for you.
 
 ```rs
 let mut depend_on_graph = DependOnGraph::new("<project_root>");
-depend_on_graph.add_parsed_module(parse("<module_path_1>").unwrap());
-depend_on_graph.add_parsed_module(parse("<module_path_2>").unwrap());
+depend_on_graph.add_symbol_dependency(symbol_dependency_1).unwrap();
+depend_on_graph.add_symbol_dependency(symbol_dependency_2).unwrap();
 ```
 
 `UsedByGraph` takes a `DependOnGraph` instance and reverse the edges. `UsedByGraph` is serializable so you can construct once and distribute it to other users, it also useful if you want to have multiple `UsedByGraph` for different versions of your applications.
@@ -118,15 +118,16 @@ let i18n_usages = collect_all_translation_usage("<project_root>").unwrap();
 
 ### Parser
 
-`parse` takes a module path and returns a `ParsedModule`. If you are curious about what will be parsed as a symbol, check this [test](/crates/dt_parser/src/visitors/extract_module_scopped_symbols.rs#L582-L650).
+`Parser` provides two ways to construct the AST.
 
 ```rs
-let parsed_module = parse("<module_path>").unwrap();
+let module_ast_from_path = Input::Path("<module_path>").get_module_ast().unwrap();
+let module_ast_from_input = Input::Code("<inline_code>").get_module_ast().unwrap();
 ```
 
 ### Path Resolver
 
-`PathResolver` provide a very simple `resolve_path()` to resolve the import path based on this order:
+`PathResolver` provides a very simple `resolve_path()` to resolve the import path based on this order:
 
 - `<import_src>/index.js`
 - `<import_src>/index.ts`

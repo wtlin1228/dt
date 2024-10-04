@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::Parser;
 use console::style;
 use dialoguer::{theme::ColorfulTheme, BasicHistory, Confirm, Input, Select};
@@ -9,7 +10,7 @@ use std::path::PathBuf;
 use demo::spreadsheet::write_to_spreadsheet;
 use dt_core::{
     graph::{depend_on_graph::DependOnGraph, used_by_graph::UsedByGraph},
-    parser::parse,
+    parser::{collect_symbol_dependency, Input as ModuleInput},
     path_resolver::{PathResolver, ToCanonicalString},
     scheduler::ParserCandidateScheduler,
     tracker::{DependencyTracker, TraceTarget},
@@ -47,8 +48,10 @@ fn main() -> anyhow::Result<()> {
     loop {
         match scheduler.get_one_candidate() {
             Some(c) => {
-                let parsed_module = parse(c.to_str().unwrap())?;
-                depend_on_graph.add_parsed_module(parsed_module)?;
+                let module_src = c.to_str().context(format!("to_str() failed: {:?}", c))?;
+                let module_ast = ModuleInput::Path(module_src).get_module_ast()?;
+                let symbol_dependency = collect_symbol_dependency(&module_ast, module_src)?;
+                depend_on_graph.add_symbol_dependency(symbol_dependency)?;
                 scheduler.mark_candidate_as_parsed(c);
                 bar.inc(1);
             }

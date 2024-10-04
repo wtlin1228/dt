@@ -1,8 +1,9 @@
+use anyhow::Context;
 use clap::Parser;
 use dt_core::{
     graph::{depend_on_graph::DependOnGraph, used_by_graph::UsedByGraph},
     i18n::collect_all_translation_usage,
-    parser::parse,
+    parser::{collect_symbol_dependency, Input},
     path_resolver::ToCanonicalString,
     portable::Portable,
     scheduler::ParserCandidateScheduler,
@@ -45,8 +46,10 @@ fn construct_used_by_graph(project_root: &str) -> anyhow::Result<UsedByGraph> {
     loop {
         match scheduler.get_one_candidate() {
             Some(c) => {
-                let parsed_module = parse(c.to_str().unwrap())?;
-                depend_on_graph.add_parsed_module(parsed_module)?;
+                let module_src = c.to_str().context(format!("to_str() failed: {:?}", c))?;
+                let module_ast = Input::Path(module_src).get_module_ast()?;
+                let symbol_dependency = collect_symbol_dependency(&module_ast, module_src)?;
+                depend_on_graph.add_symbol_dependency(symbol_dependency)?;
                 scheduler.mark_candidate_as_parsed(c);
             }
             None => break,
