@@ -18,6 +18,10 @@ pub mod portable {
     pub use dt_portable::*;
 }
 
+pub mod route {
+    pub use dt_route::*;
+}
+
 pub mod scheduler {
     pub use dt_scheduler::*;
 }

@@ -84,6 +84,7 @@ reexport all the library crates:
 - parser
 - path_resolver
 - portable
+- route
 - scheduler
 - tracker
 
@@ -149,6 +150,17 @@ let import_module_path = path_resolver.resolve_path("<current_module_path>", "<i
 let portable = Portable::new(i18n_usages, used_by_graph);
 let serialized = portable.export().unwrap();
 let portable = Portable::import(serialized).unwrap();
+```
+
+### Route
+
+`Route` gives you the relationship between routes and symbols.
+
+```rs
+let mut symbol_to_routes = SymbolToRoutes::new();
+symbol_to_routes
+    .collect_route_dependency(&module_ast, &symbol_dependency)
+    .unwrap();
 ```
 
 ### Scheduler

@@ -997,6 +997,7 @@ dependencies = [
  "dt_parser",
  "dt_path_resolver",
  "dt_portable",
+ "dt_route",
  "dt_scheduler",
  "dt_tracker",
 ]
@@ -1049,6 +1050,19 @@ dependencies = [
  "dt_graph",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "dt_route"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dt_parser",
+ "dt_path_resolver",
+ "dt_test_utils",
+ "dt_tracker",
+ "swc_core",
+ "swc_ecma_parser",
 ]
 
 [[package]]

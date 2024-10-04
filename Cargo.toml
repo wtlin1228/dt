@@ -9,6 +9,7 @@ members = [
     "crates/dt_parser",
     "crates/dt_path_resolver",
     "crates/dt_portable",
+    "crates/dt_route",
     "crates/dt_scheduler",
     "crates/dt_test_utils",
     "crates/dt_tracker",

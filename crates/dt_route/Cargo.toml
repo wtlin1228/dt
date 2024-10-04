@@ -1,0 +1,17 @@
+[package]
+authors     = ["Leo Lin <wtlin1228@gmail.com>"]
+description = "find the relationship between symbols and routes"
+edition     = "2021"
+name        = "dt_route"
+version     = "0.1.0"
+
+
+[dependencies]
+anyhow          = { workspace = true }
+swc_core        = { workspace = true }
+swc_ecma_parser = { workspace = true }
+
+dt_parser        = { version = "0.1.0", path = "../dt_parser" }
+dt_path_resolver = { version = "0.1.0", path = "../dt_path_resolver" }
+dt_test_utils    = { version = "0.1.0", path = "../dt_test_utils" }
+dt_tracker       = { version = "0.1.0", path = "../dt_tracker" }
