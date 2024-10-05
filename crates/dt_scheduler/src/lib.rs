@@ -104,9 +104,28 @@ impl ParserCandidateScheduler {
     }
 
     fn is_valid_path(path: &PathBuf) -> bool {
-        path.is_file()
-            && path.extension().is_some()
-            && ["ts", "tsx", "js", "jsx"].contains(&path.extension().unwrap().to_str().unwrap())
+        if !path.is_file() {
+            return false;
+        }
+        let path_str = path.to_str().expect(&format!("to_str() for {:?}", path));
+        if path_str.ends_with(".js")
+            || path_str.ends_with(".jsx")
+            || path_str.ends_with(".ts")
+            || path_str.ends_with(".tsx")
+        {
+            if !path_str.ends_with(".spec.js")
+                && !path_str.ends_with(".spec.jsx")
+                && !path_str.ends_with(".spec.ts")
+                && !path_str.ends_with(".spec.tsx")
+                && !path_str.ends_with(".test.js")
+                && !path_str.ends_with(".test.jsx")
+                && !path_str.ends_with(".test.ts")
+                && !path_str.ends_with(".test.tsx")
+            {
+                return true;
+            }
+        }
+        false
     }
 
     fn collect_paths(path: &PathBuf) -> Vec<PathBuf> {
