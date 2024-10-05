@@ -2,9 +2,9 @@ import { SearchResult } from "./api";
 
 const mockedTraceResult = {
   "i18n.key.pikachu": {
-    "/account": [
+    "/account": {
       // paths from Avatar to /account
-      [
+      Avatar: [
         // path 1
         [
           {
@@ -56,14 +56,18 @@ const mockedTraceResult = {
           },
         ],
       ],
-    ],
+    },
   },
   "i18n.key.pikapi": {
-    "/home": [
+    "/home": {
       // paths from Header to /home
-      [
+      Header: [
         // path 1
         [
+          {
+            module_path: "module/path/can/be/super/long/too/bad/Header.tsx",
+            symbol_name: "Header",
+          },
           {
             module_path: "module/path/can/be/super/long/too/bad/Layout.tsx",
             symbol_name: "Layout",
@@ -72,18 +76,18 @@ const mockedTraceResult = {
             module_path: "module/path/can/be/super/long/too/bad/Home.tsx",
             symbol_name: "Home",
           },
+        ],
+      ],
+    },
+    "/account": {
+      // paths from Header to /account
+      Header: [
+        // path 1
+        [
           {
             module_path: "module/path/can/be/super/long/too/bad/Header.tsx",
             symbol_name: "Header",
           },
-        ],
-      ],
-    ],
-    "/account": [
-      // paths from Header to /account
-      [
-        // path 1
-        [
           {
             module_path:
               "module/path/can/be/super/long/too/bad/UserProfileHeader.tsx",
@@ -98,13 +102,9 @@ const mockedTraceResult = {
             module_path: "module/path/can/be/super/long/too/bad/Account.tsx",
             symbol_name: "Account",
           },
-          {
-            module_path: "module/path/can/be/super/long/too/bad/Header.tsx",
-            symbol_name: "Header",
-          },
         ],
       ],
-    ],
+    },
   },
 };
 

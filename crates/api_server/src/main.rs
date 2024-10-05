@@ -3,7 +3,7 @@ use actix_web::{error, get, web, App, HttpServer, Result};
 use dt_core::{
     graph::used_by_graph::UsedByGraph,
     portable::Portable,
-    tracker::{DependencyTracker, ModuleSymbol, TraceTarget},
+    tracker::{DependencyTracker, TraceTarget},
 };
 use serde::Serialize;
 use std::{
@@ -19,11 +19,16 @@ struct AppState {
     used_by_graph: UsedByGraph,
 }
 
+#[derive(Serialize, Clone)]
+struct Step {
+    module_path: String,
+    symbol_name: String,
+}
+
 #[derive(Serialize)]
 struct SearchResponse {
     project_root: String,
-    i18n_to_symbol: HashMap<String, HashSet<String>>,
-    trace_result: HashMap<String, HashMap<String, Vec<Vec<ModuleSymbol>>>>,
+    trace_result: HashMap<String, HashMap<String, HashMap<String, Vec<Vec<Step>>>>>,
 }
 
 #[get("/search/{search}")]
@@ -35,41 +40,83 @@ async fn search(
 
     // TODO: deal with search mode
 
-    match data.i18n_to_symbol.get(&search) {
-        None => Err(error::ErrorNotFound(format!("{} not found", search))),
-        Some(ts) => {
-            let mut dependency_tracker = DependencyTracker::new(&data.used_by_graph, true);
-            let mut trace_result: HashMap<String, HashMap<String, Vec<Vec<ModuleSymbol>>>> =
-                HashMap::new();
-            for (module_path, symbols) in ts {
-                trace_result.insert(module_path.to_owned(), HashMap::new());
+    let mut dependency_tracker = DependencyTracker::new(&data.used_by_graph, true);
+    let matched_i18n_keys = vec![&search];
+    let mut trace_result = HashMap::new();
+    for i18n_key in matched_i18n_keys {
+        let mut route_to_paths = HashMap::new();
+        if let Some(i18n_key_usage) = data.i18n_to_symbol.get(i18n_key) {
+            for (module_path, symbols) in i18n_key_usage {
                 for symbol in symbols {
                     let full_paths = dependency_tracker
                         .trace((module_path.clone(), TraceTarget::LocalVar(symbol.clone())))
                         .unwrap();
-                    trace_result
-                        .entry(module_path.to_owned())
-                        .and_modify(|symbol_table| {
-                            symbol_table.insert(symbol.to_owned(), full_paths);
-                        });
+                    // traverse each path and check if any symbol is used in some routes
+                    for mut full_path in full_paths {
+                        full_path.reverse();
+                        for (i, (step_module_path, step_trace_target)) in
+                            full_path.iter().enumerate()
+                        {
+                            match step_trace_target {
+                                TraceTarget::LocalVar(step_symbol_name) => {
+                                    if let Some(symbol_to_routes) =
+                                        data.symbol_to_route.get(step_module_path)
+                                    {
+                                        if let Some(routes) = symbol_to_routes.get(step_symbol_name)
+                                        {
+                                            let dependency_from_target_to_route: Vec<Step> =
+                                                full_path[0..i]
+                                                    .iter()
+                                                    .map(|(path, target)| Step {
+                                                        module_path: path.clone(),
+                                                        symbol_name: target.to_string(),
+                                                    })
+                                                    .collect();
+                                            for route in routes.iter() {
+                                                if !route_to_paths.contains_key(route) {
+                                                    route_to_paths
+                                                        .insert(route.clone(), HashMap::new());
+                                                }
+                                                if !route_to_paths
+                                                    .get(route)
+                                                    .unwrap()
+                                                    .contains_key(symbol)
+                                                {
+                                                    route_to_paths
+                                                        .get_mut(route)
+                                                        .unwrap()
+                                                        .insert(symbol.to_string(), vec![]);
+                                                }
+                                                route_to_paths
+                                                    .get_mut(route)
+                                                    .unwrap()
+                                                    .get_mut(symbol)
+                                                    .unwrap()
+                                                    .push(dependency_from_target_to_route.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => (),
+                            }
+                        }
+                    }
                 }
             }
-
-            Ok(web::Json(SearchResponse {
-                project_root: data.project_root.to_owned(),
-                i18n_to_symbol: ts.to_owned(),
-                trace_result,
-            }))
         }
+        trace_result.insert(i18n_key.to_string(), route_to_paths);
     }
+
+    Ok(web::Json(SearchResponse {
+        project_root: data.project_root.to_owned(),
+        trace_result,
+    }))
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // TODO: get portable path from args
-    // let mut file = File::open("<the portable path>")?;
-    let mut file =
-        File::open("/Users/linweitang/rust/js-symbol-dependency-tracker/outputs/sample.json")?;
+    let mut file = File::open("<the portable path>")?;
     let mut exported = String::new();
     file.read_to_string(&mut exported)?;
     let portable = Portable::import(&exported).unwrap();

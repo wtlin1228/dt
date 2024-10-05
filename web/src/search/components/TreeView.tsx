@@ -99,12 +99,12 @@ export const TreeView = React.memo(function TreeView({
                   itemId={`${i18nKey} - ${url}`}
                   label={url}
                 >
-                  {traceTargets.map((traceTarget, i) => (
+                  {Object.entries(traceTargets).map(([traceTarget, paths]) => (
                     <TracePathToTreeView
-                      key={`${i18nKey} - ${url} - path${i}`}
+                      key={`${i18nKey} - ${url} - ${traceTarget}`}
                       tracePaths={mapAllModuleSymbolToString(
                         data.project_root,
-                        traceTarget
+                        paths
                       )}
                     />
                   ))}

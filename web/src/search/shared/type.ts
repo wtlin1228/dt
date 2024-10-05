@@ -6,9 +6,11 @@ export type ModuleSymbol = {
   symbol_name: string;
 };
 export type TracePath = ModuleSymbol[];
-export type TraceTarget = TracePath[];
 
 // Trace result might have multiple i18n keys, each i18n key might be
 // used in multiple module symbols, and each module symbol might be
 // used in multiple urls through different paths.
-export type TraceResult = Record<I18nKey, Record<Url, TraceTarget[]>>;
+export type TraceResult = Record<
+  I18nKey,
+  Record<Url, Record<string, TracePath[]>>
+>;
