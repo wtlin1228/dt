@@ -11,7 +11,7 @@ use swc_core::ecma::{
 #[derive(Debug)]
 pub struct SymbolToRoutes {
     // one symbol can be used in multiple routes
-    table: HashMap<ModuleSymbol, Vec<String>>,
+    pub table: HashMap<ModuleSymbol, Vec<String>>,
 }
 
 impl SymbolToRoutes {

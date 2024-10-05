@@ -14,14 +14,14 @@ use std::{
 
 struct AppState {
     project_root: String,
-    translation_usage: HashMap<String, HashMap<String, HashSet<String>>>,
+    i18n_to_symbol: HashMap<String, HashMap<String, HashSet<String>>>,
     used_by_graph: UsedByGraph,
 }
 
 #[derive(Serialize)]
 struct SearchResponse {
     project_root: String,
-    translation_usage: HashMap<String, HashSet<String>>,
+    i18n_to_symbol: HashMap<String, HashSet<String>>,
     trace_result: HashMap<String, HashMap<String, Vec<Vec<ModuleSymbol>>>>,
 }
 
@@ -32,7 +32,7 @@ async fn search(
 ) -> Result<web::Json<SearchResponse>> {
     let search = path.into_inner();
 
-    match data.translation_usage.get(&search) {
+    match data.i18n_to_symbol.get(&search) {
         None => Err(error::ErrorNotFound(format!("{} not found", search))),
         Some(ts) => {
             let mut dependency_tracker = DependencyTracker::new(&data.used_by_graph, true);
@@ -54,7 +54,7 @@ async fn search(
 
             Ok(web::Json(SearchResponse {
                 project_root: data.project_root.to_owned(),
-                translation_usage: ts.to_owned(),
+                i18n_to_symbol: ts.to_owned(),
                 trace_result,
             }))
         }
@@ -76,7 +76,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Cors::default().allowed_origin("http://localhost:5173"))
             .app_data(web::Data::new(AppState {
                 project_root: portable.project_root.clone(),
-                translation_usage: portable.translation_usage.clone(),
+                i18n_to_symbol: portable.i18n_to_symbol.clone(),
                 used_by_graph: portable.used_by_graph.clone(),
             }))
             .service(search)

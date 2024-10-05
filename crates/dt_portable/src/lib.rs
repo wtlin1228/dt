@@ -1,4 +1,5 @@
 use dt_graph::used_by_graph::UsedByGraph;
+use dt_tracker::ModuleSymbol;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -15,7 +16,14 @@ pub struct Portable {
     //     "module path 1" => ["A", "B", "C"],
     //   },
     // }
-    pub translation_usage: HashMap<String, HashMap<String, HashSet<String>>>,
+    pub i18n_to_symbol: HashMap<String, HashMap<String, HashSet<String>>>,
+
+    // {
+    //   ("module path 1", LocalVar("A")) => ["/route/path/x", "/route/path/y"]
+    //   ("module path 1", LocalVar("B")) => ["/route/path/x"]
+    //   ("module path 2", LocalVar("A")) => ["/route/path/z"]
+    // }
+    pub symbol_to_route: HashMap<ModuleSymbol, Vec<String>>,
 
     // {
     //   "module path 1" => {
@@ -30,12 +38,14 @@ pub struct Portable {
 impl Portable {
     pub fn new(
         project_root: String,
-        translation_usage: HashMap<String, HashMap<String, HashSet<String>>>,
+        i18n_to_symbol: HashMap<String, HashMap<String, HashSet<String>>>,
+        symbol_to_route: HashMap<ModuleSymbol, Vec<String>>,
         used_by_graph: UsedByGraph,
     ) -> Self {
         Self {
             project_root,
-            translation_usage,
+            i18n_to_symbol,
+            symbol_to_route,
             used_by_graph,
         }
     }

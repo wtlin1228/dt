@@ -1,9 +1,9 @@
 use anyhow::{bail, Context};
 use dt_graph::used_by_graph::{UsedBy, UsedByGraph, UsedByOther, UsedByType};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Deserialize)]
 pub enum TraceTarget {
     NamedExport(String),
     DefaultExport,

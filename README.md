@@ -147,7 +147,12 @@ let import_module_path = path_resolver.resolve_path("<current_module_path>", "<i
 `Portable` defines the structure of the portable files.
 
 ```rs
-let portable = Portable::new(i18n_usages, used_by_graph);
+let portable = Portable::new(
+    project_root,
+    i18n_to_symbol,
+    symbol_to_route,
+    used_by_graph
+);
 let serialized = portable.export().unwrap();
 let portable = Portable::import(serialized).unwrap();
 ```
