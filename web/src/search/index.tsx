@@ -7,9 +7,10 @@ import { getSearchResult } from "./api";
 
 export const Search = () => {
   const [search, setSearch] = React.useState<undefined | string>();
+  const [exactMatch, setExactMatch] = React.useState<boolean>(true);
   const { isPending, isLoading, isError, data, error } = useQuery({
-    queryKey: ["search", search],
-    queryFn: () => getSearchResult(search!),
+    queryKey: ["search", search, exactMatch],
+    queryFn: () => getSearchResult(search!, exactMatch),
     enabled: search !== undefined,
     staleTime: 5 * 1000,
     retry: false,
@@ -34,6 +35,8 @@ export const Search = () => {
           setSearch(search);
         }}
         isSearching={isLoading}
+        exactMatch={exactMatch}
+        setExactMatch={setExactMatch}
       />
       <Paper elevation={1} sx={{ padding: 2 }}>
         {isPending ? (

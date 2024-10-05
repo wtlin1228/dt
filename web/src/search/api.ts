@@ -6,8 +6,13 @@ export type SearchResult = {
   trace_result: TraceResult;
 };
 
-export async function getSearchResult(search: string): Promise<SearchResult> {
-  const url = `http://127.0.0.1:8080/search/${encodeURIComponent(search)}`;
+export async function getSearchResult(
+  search: string,
+  exactMatch: boolean
+): Promise<SearchResult> {
+  const url = `http://127.0.0.1:8080/search?q=${encodeURIComponent(
+    search
+  )}&exact_match=${exactMatch}`;
 
   if (search === "demo") {
     return mockedSearchResult;
@@ -25,8 +30,6 @@ export async function getSearchResult(search: string): Promise<SearchResult> {
     return data;
   } catch (error) {
     // Handle and re-throw the error so React Query can capture it
-    throw new Error(
-      `Failed to fetch search results: ${(error as Error).message}`
-    );
+    throw new Error((error as Error).message);
   }
 }

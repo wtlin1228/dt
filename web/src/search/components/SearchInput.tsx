@@ -3,13 +3,19 @@ import Paper from "@mui/material/Paper";
 import InputBase from "@mui/material/InputBase";
 import IconButton from "@mui/material/IconButton";
 import SearchIcon from "@mui/icons-material/Search";
+import BlurOffIcon from "@mui/icons-material/BlurOff";
+import BlurOnIcon from "@mui/icons-material/BlurOn";
 
 export function CustomizedInputBase({
   handleSearch,
   isSearching,
+  exactMatch,
+  setExactMatch,
 }: {
   handleSearch: (search: string) => void;
   isSearching: boolean;
+  exactMatch: boolean;
+  setExactMatch: (b: boolean) => void;
 }) {
   const inputRef = React.useRef<HTMLInputElement>();
 
@@ -34,8 +40,8 @@ export function CustomizedInputBase({
       <InputBase
         fullWidth
         sx={{ ml: 1, flex: 1 }}
-        placeholder="Search Translation Key"
-        inputProps={{ "aria-label": "search translation key" }}
+        placeholder="Search Translation"
+        inputProps={{ "aria-label": "search translation" }}
         inputRef={inputRef}
         disabled={isSearching}
       />
@@ -54,6 +60,16 @@ export function CustomizedInputBase({
         disabled={isSearching}
       >
         <SearchIcon />
+      </IconButton>
+      <IconButton
+        type="button"
+        sx={{ p: "10px" }}
+        aria-label="toggle match whole word"
+        onClick={() => {
+          setExactMatch(!exactMatch);
+        }}
+      >
+        {exactMatch ? <BlurOffIcon /> : <BlurOnIcon />}
       </IconButton>
     </Paper>
   );

@@ -5,7 +5,7 @@ use dt_core::{
     portable::Portable,
     tracker::{DependencyTracker, TraceTarget},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
@@ -32,19 +32,40 @@ struct SearchResponse {
     trace_result: HashMap<String, HashMap<String, HashMap<String, Vec<Vec<Step>>>>>,
 }
 
-#[get("/search/{search}")]
+#[derive(Deserialize)]
+struct Info {
+    q: String,
+    exact_match: bool,
+}
+
+#[get("/search")]
 async fn search(
     data: web::Data<AppState>,
-    path: web::Path<String>,
+    info: web::Query<Info>,
 ) -> Result<web::Json<SearchResponse>> {
-    let search = path.into_inner();
+    let search = &info.q;
+    let exact_match = info.exact_match;
 
-    // TODO: deal with search mode
     let mut matched_i18n_keys: Vec<String> = Vec::new();
-    for (i18n_key, translation) in data.translation_json.iter() {
-        if translation == &search {
-            matched_i18n_keys.push(i18n_key.to_owned());
+    match exact_match {
+        true => {
+            for (i18n_key, translation) in data.translation_json.iter() {
+                if translation == search {
+                    matched_i18n_keys.push(i18n_key.to_owned());
+                }
+            }
         }
+        false => {
+            for (i18n_key, translation) in data.translation_json.iter() {
+                if translation.contains(search) {
+                    matched_i18n_keys.push(i18n_key.to_owned());
+                }
+            }
+        }
+    }
+
+    if matched_i18n_keys.len() == 0 {
+        return Err(error::ErrorNotFound(format!("No result for {}", search)));
     }
 
     let mut dependency_tracker = DependencyTracker::new(&data.used_by_graph, true);
@@ -122,7 +143,9 @@ async fn search(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // TODO: get portable path from args
-    let mut file = File::open("<the portable path>")?;
+    // let mut file = File::open("<the portable path>")?;
+    let mut file =
+        File::open("/Users/linweitang/rust/js-symbol-dependency-tracker/outputs/naopleon-06.json")?;
     let mut exported = String::new();
     file.read_to_string(&mut exported)?;
     let portable = Portable::import(&exported).unwrap();

@@ -84,7 +84,12 @@ export const TreeView = React.memo(function TreeView({
   data: SearchResult;
 }) {
   return (
-    <Box>
+    <Box
+      sx={{
+        "overflow-x": "scroll",
+        pb: 2,
+      }}
+    >
       <StyledTreeView>
         {Object.entries(data.trace_result).map(
           ([i18nKey, urlToTraceTargets]) => (
