@@ -14,6 +14,7 @@ use std::{
 
 struct AppState {
     project_root: String,
+    translation_json: HashMap<String, String>,
     i18n_to_symbol: HashMap<String, HashMap<String, HashSet<String>>>,
     symbol_to_route: HashMap<String, HashMap<String, Vec<String>>>,
     used_by_graph: UsedByGraph,
@@ -39,11 +40,16 @@ async fn search(
     let search = path.into_inner();
 
     // TODO: deal with search mode
+    let mut matched_i18n_keys: Vec<String> = Vec::new();
+    for (i18n_key, translation) in data.translation_json.iter() {
+        if translation == &search {
+            matched_i18n_keys.push(i18n_key.to_owned());
+        }
+    }
 
     let mut dependency_tracker = DependencyTracker::new(&data.used_by_graph, true);
-    let matched_i18n_keys = vec![&search];
     let mut trace_result = HashMap::new();
-    for i18n_key in matched_i18n_keys {
+    for i18n_key in matched_i18n_keys.iter() {
         let mut route_to_paths = HashMap::new();
         if let Some(i18n_key_usage) = data.i18n_to_symbol.get(i18n_key) {
             for (module_path, symbols) in i18n_key_usage {
@@ -126,6 +132,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Cors::default().allowed_origin("http://localhost:5173"))
             .app_data(web::Data::new(AppState {
                 project_root: portable.project_root.clone(),
+                translation_json: portable.translation_json.clone(),
                 i18n_to_symbol: portable.i18n_to_symbol.clone(),
                 symbol_to_route: portable.symbol_to_route.clone(),
                 used_by_graph: portable.used_by_graph.clone(),

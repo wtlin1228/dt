@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Portable {
     pub project_root: String,
+    pub translation_json: HashMap<String, String>,
 
     // {
     //   "i18n.bird" => {
@@ -22,7 +23,7 @@ pub struct Portable {
     //     "Foo" => ["/route/path/x", "/route/path/y"]
     //     "Bar" => ["/route/path/x"]
     //   }
-    //   "module path 22" => {
+    //   "module path 2" => {
     //     "Baz" => ["/route/path/z"]
     //   }
     pub symbol_to_route: HashMap<String, HashMap<String, Vec<String>>>,
@@ -40,12 +41,14 @@ pub struct Portable {
 impl Portable {
     pub fn new(
         project_root: String,
+        translation_json: HashMap<String, String>,
         i18n_to_symbol: HashMap<String, HashMap<String, HashSet<String>>>,
         symbol_to_route: HashMap<String, HashMap<String, Vec<String>>>,
         used_by_graph: UsedByGraph,
     ) -> Self {
         Self {
             project_root,
+            translation_json,
             i18n_to_symbol,
             symbol_to_route,
             used_by_graph,

@@ -9,8 +9,11 @@ use dt_core::{
     route::SymbolToRoutes,
     scheduler::ParserCandidateScheduler,
 };
-
-use std::{fs::File, io::prelude::*, path::PathBuf};
+use std::{
+    fs::File,
+    io::{prelude::*, BufReader},
+    path::PathBuf,
+};
 
 #[derive(Parser)]
 #[command(version, about = "Parse a project and serialize its output", long_about = None)]
@@ -18,6 +21,10 @@ struct Cli {
     /// Input path
     #[arg(short)]
     input: String,
+
+    /// translation.json path
+    #[arg(short)]
+    translation_path: String,
 
     /// Output path
     #[arg(short)]
@@ -27,6 +34,8 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let project_root = PathBuf::from(&cli.input).to_canonical_string()?;
+    let translation_json = File::open(&cli.translation_path)?;
+    let translation_json_reader = BufReader::new(translation_json);
 
     let mut scheduler = ParserCandidateScheduler::new(&project_root);
     let mut depend_on_graph = DependOnGraph::new(&project_root);
@@ -50,6 +59,7 @@ fn main() -> anyhow::Result<()> {
 
     let portable = Portable::new(
         project_root.to_owned(),
+        serde_json::from_reader(translation_json_reader)?,
         i18n_to_symbol.table,
         symbol_to_route.table,
         UsedByGraph::from(&depend_on_graph),

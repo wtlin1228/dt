@@ -719,6 +719,7 @@ dependencies = [
  "anyhow",
  "clap",
  "dt_core",
+ "serde_json",
 ]
 
 [[package]]

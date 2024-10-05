@@ -68,11 +68,7 @@ function TracePathToTreeView({
   for (let [key, value] of groups) {
     const uniuqueKey = uuidv4();
     treeItems.push(
-      <TreeItem
-        key={uniuqueKey}
-        itemId={uniuqueKey}
-        label={`${key} (${value.length})`}
-      >
+      <TreeItem key={uniuqueKey} itemId={uniuqueKey} label={key}>
         {depth + 1 < group2MaxLength.get(key)! ? (
           <TracePathToTreeView tracePaths={value} depth={depth + 1} />
         ) : null}
