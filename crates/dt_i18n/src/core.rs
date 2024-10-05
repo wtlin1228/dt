@@ -84,6 +84,22 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_exported_labels() {
+        let module = parse_module(
+            r#"
+            export const LABELS = translate({
+                bird: "i18n.bird",
+                cat: "i18n.cat",
+                dog: "i18n.dog",
+            })
+            const Foo = () => <div>{LABELS.bird}</div>
+            "#,
+        )
+        .unwrap();
+        assert!(collect_translation(&module).unwrap().len() == 0);
+    }
+
+    #[test]
     fn unsupported_direct_usage() {
         let module = parse_module(
             r#"
