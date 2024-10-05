@@ -12,4 +12,3 @@ serde      = { workspace = true }
 serde_json = { workspace = true }
 
 dt_graph   = { version = "0.1.0", path = "../dt_graph" }
-dt_tracker = { version = "0.1.0", path = "../dt_tracker" }

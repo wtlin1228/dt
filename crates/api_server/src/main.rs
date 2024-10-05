@@ -15,6 +15,7 @@ use std::{
 struct AppState {
     project_root: String,
     i18n_to_symbol: HashMap<String, HashMap<String, HashSet<String>>>,
+    symbol_to_route: HashMap<String, HashMap<String, Vec<String>>>,
     used_by_graph: UsedByGraph,
 }
 
@@ -31,6 +32,8 @@ async fn search(
     path: web::Path<String>,
 ) -> Result<web::Json<SearchResponse>> {
     let search = path.into_inner();
+
+    // TODO: deal with search mode
 
     match data.i18n_to_symbol.get(&search) {
         None => Err(error::ErrorNotFound(format!("{} not found", search))),
@@ -77,6 +80,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(AppState {
                 project_root: portable.project_root.clone(),
                 i18n_to_symbol: portable.i18n_to_symbol.clone(),
+                symbol_to_route: portable.symbol_to_route.clone(),
                 used_by_graph: portable.used_by_graph.clone(),
             }))
             .service(search)

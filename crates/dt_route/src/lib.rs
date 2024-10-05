@@ -1,7 +1,6 @@
 use dt_parser::{
     anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT, types::SymbolDependency,
 };
-use dt_tracker::{ModuleSymbol, TraceTarget};
 use std::collections::{HashMap, HashSet};
 use swc_core::ecma::{
     ast::*,
@@ -11,7 +10,7 @@ use swc_core::ecma::{
 #[derive(Debug)]
 pub struct SymbolToRoutes {
     // one symbol can be used in multiple routes
-    pub table: HashMap<ModuleSymbol, Vec<String>>,
+    pub table: HashMap<String, HashMap<String, Vec<String>>>,
 }
 
 impl SymbolToRoutes {
@@ -73,21 +72,17 @@ impl SymbolToRoutes {
     }
 
     fn aggregate(&mut self, module_path: &str, routes: Vec<Route>) {
+        let mut map = HashMap::new();
         for route in routes {
             for symbol in route.depend_on {
-                let module_symbol: ModuleSymbol =
-                    (module_path.to_owned(), TraceTarget::LocalVar(symbol));
-                if !self.table.contains_key(&module_symbol) {
-                    self.table
-                        .insert(module_symbol, vec![route.path.to_owned()]);
+                if !map.contains_key(&symbol) {
+                    map.insert(symbol, vec![route.path.to_owned()]);
                 } else {
-                    self.table
-                        .get_mut(&module_symbol)
-                        .unwrap()
-                        .push(route.path.to_owned());
+                    map.get_mut(&symbol).unwrap().push(route.path.to_owned());
                 }
             }
         }
+        self.table.insert(module_path.to_owned(), map);
     }
 }
 
@@ -210,12 +205,9 @@ mod tests {
 
     macro_rules! assert_symbol_to_routes_table {
         ($table:expr, $($symbol_name:expr => $expected_route_paths:expr),* $(,)?) => {{
+            let map = $table.get(MOCK_MODULE_PATH).unwrap();
             $(
-                let route_paths = $table.get(
-                    &(
-                        MOCK_MODULE_PATH.to_string(),
-                        TraceTarget::LocalVar($symbol_name.to_string())
-                    )).unwrap();
+                let route_paths = map.get($symbol_name).unwrap();
                 assert_eq!(route_paths.len(), $expected_route_paths.len());
                 for (i, expected) in $expected_route_paths.into_iter().enumerate() {
                     assert_eq!(route_paths[i], expected);

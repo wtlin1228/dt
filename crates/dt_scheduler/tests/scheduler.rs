@@ -54,7 +54,7 @@ fn topological_order() {
             assert!(not_parsed.contains(&namespace_import));
         }
 
-        not_parsed.remove(&candidate);
+        assert!(not_parsed.remove(&candidate));
         scheduler.mark_candidate_as_parsed(candidate);
     }
     assert_eq!(scheduler.get_total_remaining_candidate_count(), 0);
