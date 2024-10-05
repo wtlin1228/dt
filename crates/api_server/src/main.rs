@@ -1,5 +1,6 @@
 use actix_cors::Cors;
 use actix_web::{error, get, web, App, HttpServer, Result};
+use clap::Parser;
 use dt_core::{
     graph::used_by_graph::UsedByGraph,
     portable::Portable,
@@ -140,12 +141,18 @@ async fn search(
     }))
 }
 
+#[derive(Parser)]
+#[command(version, about = "Start the server to provide search API", long_about = None)]
+struct Cli {
+    /// Portable path
+    #[arg(short)]
+    portable: String,
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // TODO: get portable path from args
-    // let mut file = File::open("<the portable path>")?;
-    let mut file =
-        File::open("/Users/linweitang/rust/js-symbol-dependency-tracker/outputs/naopleon-06.json")?;
+    let cli = Cli::parse();
+    let mut file = File::open(cli.portable)?;
     let mut exported = String::new();
     file.read_to_string(&mut exported)?;
     let portable = Portable::import(&exported).unwrap();

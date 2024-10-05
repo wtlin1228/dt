@@ -372,6 +372,7 @@ dependencies = [
  "actix-cors",
  "actix-web",
  "anyhow",
+ "clap",
  "dt_core",
  "serde",
 ]

@@ -9,6 +9,7 @@ version     = "0.1.0"
 [dependencies]
 anyhow = { workspace = true }
 serde  = { workspace = true }
+clap   = { workspace = true }
 
 actix-web  = "4"
 actix-cors = "0.7"
