@@ -159,7 +159,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .wrap(Cors::default().allowed_origin("http://localhost:5173"))
+            .wrap(Cors::default().allow_any_method().allow_any_origin())
             .app_data(web::Data::new(AppState {
                 project_root: portable.project_root.clone(),
                 translation_json: portable.translation_json.clone(),
