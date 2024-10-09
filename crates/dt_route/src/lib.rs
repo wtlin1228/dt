@@ -1,3 +1,4 @@
+use anyhow::bail;
 use dt_parser::{
     anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT, types::SymbolDependency,
 };
@@ -118,7 +119,7 @@ impl RouteVisitor {
         }
     }
 
-    fn get_route_path(&self, route_object: &Expr) -> String {
+    fn get_route_path(&self, route_object: &Expr) -> anyhow::Result<String> {
         match route_object {
             Expr::Object(object_lit) => {
                 for prop in object_lit.props.iter() {
@@ -129,10 +130,10 @@ impl RouteVisitor {
                                     if ident_name.sym == "path" {
                                         match &**value {
                                             Expr::Lit(lit) => match lit {
-                                                Lit::Str(s) => return s.value.to_string(),
-                                                _ => panic!("path value is literal but not string literal for {}", self.module_path)
+                                                Lit::Str(s) => return Ok(s.value.to_string()),
+                                                _ => bail!("path value is literal but not string literal for {}", self.module_path)
                                             },
-                                            _ => panic!(
+                                            _ => bail!(
                                                 "failed to transform value to string for {}",
                                                 self.module_path
                                             ),
@@ -147,9 +148,9 @@ impl RouteVisitor {
                     }
                 }
             }
-            _ => panic!("invalid route object for {}", self.module_path),
+            _ => bail!("invalid route object for {}", self.module_path),
         }
-        panic!(
+        bail!(
             "failed to find the path in the route object for {}",
             self.module_path
         );
@@ -176,13 +177,17 @@ impl Visit for RouteVisitor {
                     match prop {
                         PropOrSpread::Prop(prop) => match &**prop {
                             Prop::KeyValue(KeyValueProp { value, .. }) => {
-                                let route_path = self.get_route_path(&**value);
-                                self.current_route_path = Some(Route {
-                                    path: route_path,
-                                    depend_on: HashSet::new(),
-                                });
-                                value.visit_children_with(self);
-                                self.routes.push(self.current_route_path.take().unwrap());
+                                match self.get_route_path(&**value) {
+                                    Ok(route_path) => {
+                                        self.current_route_path = Some(Route {
+                                            path: route_path,
+                                            depend_on: HashSet::new(),
+                                        });
+                                        value.visit_children_with(self);
+                                        self.routes.push(self.current_route_path.take().unwrap());
+                                    }
+                                    Err(_) => (),
+                                }
                             }
                             _ => (),
                         },
