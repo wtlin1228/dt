@@ -1,3 +1,7 @@
+pub mod database {
+    pub use dt_database::*;
+}
+
 pub mod graph {
     pub use dt_graph::*;
 }

@@ -1,0 +1,11 @@
+[package]
+authors     = ["Leo Lin <wtlin1228@gmail.com>"]
+description = "relational database for dt"
+edition     = "2021"
+name        = "dt_database"
+version     = "0.1.0"
+
+
+[dependencies]
+anyhow   = { workspace = true }
+rusqlite = { workspace = true }
