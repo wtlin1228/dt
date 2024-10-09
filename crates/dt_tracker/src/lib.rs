@@ -79,6 +79,13 @@ impl<'graph> DependencyTracker<'graph> {
     }
 
     pub fn trace(&mut self, module_symbol: ModuleSymbol) -> anyhow::Result<Vec<Vec<ModuleSymbol>>> {
+        // Treat routeNmaes specially since they cause a lot of circular dependencies in
+        // some of our codebases. One assumption of this tool is "no circular dependency"
+        // , so let's workaround here for now.
+        if module_symbol.1.to_string() == "routeNames" {
+            return Ok(vec![]);
+        }
+
         // early return if cached
         if let Some(cached) = self.cache.get(&module_symbol) {
             return Ok(cached.clone());
