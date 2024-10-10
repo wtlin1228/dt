@@ -56,6 +56,19 @@ impl Project {
             Err(_) => self.add_module(conn, path),
         }
     }
+
+    pub fn add_translation(
+        &self,
+        conn: &Connection,
+        key: &str,
+        value: &str,
+    ) -> anyhow::Result<Translation> {
+        Translation::create(conn, self, key, value)
+    }
+
+    pub fn get_translation(&self, conn: &Connection, key: &str) -> anyhow::Result<Translation> {
+        Translation::retrieve(conn, self, key)
+    }
 }
 
 #[derive(Debug)]
@@ -117,6 +130,15 @@ impl Module {
         name: &str,
     ) -> anyhow::Result<Symbol> {
         Symbol::create(conn, self, variant, name)
+    }
+
+    pub fn get_symbol(
+        &self,
+        conn: &Connection,
+        variant: SymbolVariant,
+        name: &str,
+    ) -> anyhow::Result<Symbol> {
+        Symbol::retrieve(conn, self, variant, name)
     }
 
     /// single thread only: retrieve then create
@@ -291,6 +313,7 @@ impl SymbolDependency {
 #[derive(Debug)]
 pub struct Translation {
     pub id: usize,
+    pub project_id: usize,
     pub key: String,
     pub value: String,
 }
@@ -299,9 +322,10 @@ impl Model for Translation {
     fn table() -> String {
         "
         translation (
-            id    INTEGER PRIMARY KEY AUTOINCREMENT,
-            key   TEXT NOT NULL,
-            value TEXT NOT NULL
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER REFERENCES project(id) ON DELETE CASCADE,
+            key        TEXT NOT NULL,
+            value      TEXT NOT NULL
         )
         "
         .to_string()
@@ -312,9 +336,38 @@ impl Translation {
     pub fn from_row(row: &Row) -> rusqlite::Result<Self> {
         Ok(Self {
             id: row.get(0)?,
-            key: row.get(1)?,
-            value: row.get(2)?,
+            project_id: row.get(1)?,
+            key: row.get(2)?,
+            value: row.get(3)?,
         })
+    }
+
+    /// single thread only: last_insert_rowid()
+    pub fn create(
+        conn: &Connection,
+        project: &Project,
+        key: &str,
+        value: &str,
+    ) -> anyhow::Result<Self> {
+        conn.execute(
+            "INSERT INTO translation (project_id, key, value) VALUES (?1, ?2, ?3)",
+            params![project.id, key, value],
+        )?;
+        let translation = conn.query_row(
+            "SELECT * FROM translation WHERE id=last_insert_rowid()",
+            (),
+            Self::from_row,
+        )?;
+        Ok(translation)
+    }
+
+    pub fn retrieve(conn: &Connection, project: &Project, key: &str) -> anyhow::Result<Self> {
+        let translation = conn.query_row(
+            "SELECT * FROM translation WHERE (project_id, key) = (?1, ?2)",
+            params![project.id, key],
+            Self::from_row,
+        )?;
+        Ok(translation)
     }
 }
 
@@ -346,6 +399,24 @@ impl TranslationUsage {
             translation_id: row.get(1)?,
             symbol_id: row.get(2)?,
         })
+    }
+
+    /// single thread only: last_insert_rowid()
+    pub fn create(
+        conn: &Connection,
+        translation: &Translation,
+        symbol: &Symbol,
+    ) -> anyhow::Result<Self> {
+        conn.execute(
+            "INSERT INTO translation_usage (translation_id, symbol_id) VALUES (?1, ?2)",
+            params![translation.id, symbol.id],
+        )?;
+        let translation = conn.query_row(
+            "SELECT * FROM translation_usage WHERE id=last_insert_rowid()",
+            (),
+            Self::from_row,
+        )?;
+        Ok(translation)
     }
 }
 
