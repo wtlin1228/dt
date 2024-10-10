@@ -12,7 +12,7 @@ use dt_core::{
     },
     path_resolver::{PathResolver, ToCanonicalString},
     portable::Portable,
-    route::SymbolToRoutes,
+    route::{Route, SymbolToRoutes},
     scheduler::ParserCandidateScheduler,
 };
 use std::{
@@ -397,6 +397,33 @@ impl Project {
         }
         Ok(())
     }
+
+    pub fn add_route_usage(
+        &self,
+        module: &models::Module,
+        route_usage: &Vec<Route>,
+    ) -> anyhow::Result<()> {
+        for Route { path, depend_on } in route_usage.iter() {
+            let route = self
+                .project
+                .add_route(&self.db.conn, path)
+                .context(format!("create route {} for project", path))?;
+            for symbol_name in depend_on.iter() {
+                let symbol = module
+                    .get_symbol(
+                        &self.db.conn,
+                        models::SymbolVariant::LocalVariable,
+                        &symbol_name,
+                    )
+                    .context(format!(
+                        "try to add route for symbol {}, but symbol doesn't exist",
+                        symbol_name,
+                    ))?;
+                models::RouteUsage::create(&self.db.conn, &route, &symbol)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -423,17 +450,27 @@ fn main() -> anyhow::Result<()> {
                 let module_ast = Input::Path(module_src).get_module_ast()?;
                 let symbol_dependency = collect_symbol_dependency(&module_ast, module_src)?;
                 let i18n_usage = i18n_to_symbol.collect_i18n_usage(module_src, &module_ast)?;
-                symbol_to_route.collect_route_dependency(&module_ast, &symbol_dependency)?;
+                let route_usage =
+                    symbol_to_route.collect_route_dependency(&module_ast, &symbol_dependency)?;
 
-                let module = project.add_module(&symbol_dependency).context(format!(
-                    "add module {} to project",
-                    symbol_dependency.canonical_path
-                ))?;
+                let module = project
+                    .add_module(&symbol_dependency)
+                    .context(format!(
+                        "add module {} to project",
+                        symbol_dependency.canonical_path
+                    ))
+                    .context(format!("add module {} to project", module_src))?;
                 project
                     .add_i18n_usage(&module, &i18n_usage)
                     .context(format!(
                         "add i18n usage of module {} to project",
-                        symbol_dependency.canonical_path
+                        module_src
+                    ))?;
+                project
+                    .add_route_usage(&module, &route_usage)
+                    .context(format!(
+                        "add route usage of module {} to project",
+                        module_src
                     ))?;
 
                 depend_on_graph.add_symbol_dependency(symbol_dependency)?;

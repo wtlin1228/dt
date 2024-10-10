@@ -24,12 +24,13 @@ impl SymbolToRoutes {
         &mut self,
         module_ast: &Module,
         symbol_dependency: &SymbolDependency,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Vec<Route>> {
         if Self::should_collect(symbol_dependency) {
             let routes = Self::collect(module_ast, symbol_dependency)?;
-            self.aggregate(symbol_dependency.canonical_path.as_str(), routes);
+            self.aggregate(symbol_dependency.canonical_path.as_str(), &routes);
+            return Ok(routes);
         }
-        Ok(())
+        Ok(vec![])
     }
 
     fn should_collect(symbol_dependency: &SymbolDependency) -> bool {
@@ -71,14 +72,14 @@ impl SymbolToRoutes {
         Ok(route_visitor.routes)
     }
 
-    fn aggregate(&mut self, module_path: &str, routes: Vec<Route>) {
+    fn aggregate(&mut self, module_path: &str, routes: &Vec<Route>) {
         let mut map = HashMap::new();
         for route in routes {
-            for symbol in route.depend_on {
-                if !map.contains_key(&symbol) {
-                    map.insert(symbol, vec![route.path.to_owned()]);
+            for symbol in route.depend_on.iter() {
+                if !map.contains_key(symbol) {
+                    map.insert(symbol.to_string(), vec![route.path.to_owned()]);
                 } else {
-                    map.get_mut(&symbol).unwrap().push(route.path.to_owned());
+                    map.get_mut(symbol).unwrap().push(route.path.to_owned());
                 }
             }
         }
@@ -87,9 +88,9 @@ impl SymbolToRoutes {
 }
 
 #[derive(Debug)]
-struct Route {
-    path: String,
-    depend_on: HashSet<String>,
+pub struct Route {
+    pub path: String,
+    pub depend_on: HashSet<String>,
 }
 
 #[derive(Debug)]

@@ -69,6 +69,10 @@ impl Project {
     pub fn get_translation(&self, conn: &Connection, key: &str) -> anyhow::Result<Translation> {
         Translation::retrieve(conn, self, key)
     }
+
+    pub fn add_route(&self, conn: &Connection, path: &str) -> anyhow::Result<Route> {
+        Route::create(conn, self, path)
+    }
 }
 
 #[derive(Debug)]
@@ -423,6 +427,7 @@ impl TranslationUsage {
 #[derive(Debug)]
 pub struct Route {
     pub id: usize,
+    pub project_id: usize,
     pub path: String,
 }
 
@@ -430,8 +435,9 @@ impl Model for Route {
     fn table() -> String {
         "
         route (
-            id   INTEGER PRIMARY KEY AUTOINCREMENT,
-            path TEXT NOT NULL
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER REFERENCES project(id) ON DELETE CASCADE,
+            path       TEXT NOT NULL
         )
         "
         .to_string()
@@ -442,8 +448,23 @@ impl Route {
     pub fn from_row(row: &Row) -> rusqlite::Result<Self> {
         Ok(Self {
             id: row.get(0)?,
-            path: row.get(1)?,
+            project_id: row.get(1)?,
+            path: row.get(2)?,
         })
+    }
+
+    /// single thread only: last_insert_rowid()
+    pub fn create(conn: &Connection, project: &Project, path: &str) -> anyhow::Result<Self> {
+        conn.execute(
+            "INSERT INTO route (project_id, path) VALUES (?1, ?2)",
+            params![project.id, path],
+        )?;
+        let route = conn.query_row(
+            "SELECT * FROM route WHERE id=last_insert_rowid()",
+            (),
+            Self::from_row,
+        )?;
+        Ok(route)
     }
 }
 
@@ -459,9 +480,9 @@ impl Model for RouteUsage {
     fn table() -> String {
         "
         route_usage (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            translation_id INTEGER REFERENCES route(id) ON DELETE CASCADE,
-            symbol_id      INTEGER REFERENCES symbol(id) ON DELETE CASCADE
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            route_id  INTEGER REFERENCES route(id) ON DELETE CASCADE,
+            symbol_id INTEGER REFERENCES symbol(id) ON DELETE CASCADE
         )
         "
         .to_string()
@@ -475,5 +496,19 @@ impl RouteUsage {
             route_id: row.get(1)?,
             symbol_id: row.get(2)?,
         })
+    }
+
+    /// single thread only: last_insert_rowid()
+    pub fn create(conn: &Connection, route: &Route, symbol: &Symbol) -> anyhow::Result<Self> {
+        conn.execute(
+            "INSERT INTO route_usage (route_id, symbol_id) VALUES (?1, ?2)",
+            params![route.id, symbol.id],
+        )?;
+        let route = conn.query_row(
+            "SELECT * FROM route_usage WHERE id=last_insert_rowid()",
+            (),
+            Self::from_row,
+        )?;
+        Ok(route)
     }
 }
