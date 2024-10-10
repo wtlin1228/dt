@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, Row, ToSql};
 
 pub trait Model {
     fn table() -> String;
@@ -30,14 +30,12 @@ impl Project {
         })
     }
 
+    /// single thread only: last_insert_rowid()
     pub fn create(conn: &Connection, path: &str) -> anyhow::Result<Self> {
         conn.execute("INSERT INTO project (path) VALUES (?1)", params![path])?;
-        let id = conn.query_row("SELECT last_insert_rowid()", (), |row| {
-            Ok(row.get::<_, usize>(0)?)
-        })?;
         let project = conn.query_row(
-            "SELECT * FROM project where id=?1",
-            params![id],
+            "SELECT * FROM project WHERE id=last_insert_rowid()",
+            (),
             Self::from_row,
         )?;
         Ok(project)
@@ -45,6 +43,18 @@ impl Project {
 
     pub fn add_module(&self, conn: &Connection, path: &str) -> anyhow::Result<Module> {
         Module::create(conn, self, path)
+    }
+
+    pub fn get_module(&self, conn: &Connection, path: &str) -> anyhow::Result<Module> {
+        Module::retrieve(conn, self, path)
+    }
+
+    /// single thread only: retrieve then create
+    pub fn get_or_create_module(&self, conn: &Connection, path: &str) -> anyhow::Result<Module> {
+        match Module::retrieve(conn, self, path) {
+            Ok(module) => Ok(module),
+            Err(_) => self.add_module(conn, path),
+        }
     }
 }
 
@@ -77,24 +87,65 @@ impl Module {
         })
     }
 
+    /// single thread only: last_insert_rowid()
     pub fn create(conn: &Connection, project: &Project, path: &str) -> anyhow::Result<Self> {
         conn.execute(
             "INSERT INTO module (project_id, path) VALUES (?1, ?2)",
             params![project.id, path],
         )?;
-        let id = conn.query_row("SELECT last_insert_rowid()", (), |row| {
-            Ok(row.get::<_, usize>(0)?)
-        })?;
         let module = conn.query_row(
-            "SELECT * FROM module where id=?1",
-            params![id],
+            "SELECT * FROM module WHERE id=last_insert_rowid()",
+            (),
             Self::from_row,
         )?;
         Ok(module)
     }
+
+    pub fn retrieve(conn: &Connection, project: &Project, path: &str) -> anyhow::Result<Self> {
+        let module = conn.query_row(
+            "SELECT * FROM module WHERE (project_id, path) = (?1, ?2)",
+            params![project.id, path],
+            Self::from_row,
+        )?;
+        Ok(module)
+    }
+
+    pub fn add_symbol(
+        &self,
+        conn: &Connection,
+        variant: SymbolVariant,
+        name: &str,
+    ) -> anyhow::Result<Symbol> {
+        Symbol::create(conn, self, variant, name)
+    }
+
+    /// single thread only: retrieve then create
+    pub fn get_or_create_symbol(
+        &self,
+        conn: &Connection,
+        variant: SymbolVariant,
+        name: &str,
+    ) -> anyhow::Result<Symbol> {
+        match Symbol::retrieve(conn, self, variant, name) {
+            Ok(symbol) => Ok(symbol),
+            Err(_) => self.add_symbol(conn, variant, name),
+        }
+    }
+
+    pub fn get_named_export_symbols(&self, conn: &Connection) -> anyhow::Result<Vec<Symbol>> {
+        let named_export_symbols: Vec<Symbol> = conn
+            .prepare("SELECT * FROM symbol WHERE (module_id, variant) = (?1, ?2)")?
+            .query_map(
+                params![self.id, SymbolVariant::NamedExport],
+                Symbol::from_row,
+            )?
+            .map(|s| s.unwrap())
+            .collect();
+        Ok(named_export_symbols)
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum SymbolVariant {
     LocalVariable,
     NamedExport,
@@ -108,6 +159,16 @@ impl SymbolVariant {
             1 => Self::NamedExport,
             2 => Self::DefaultExport,
             _ => unreachable!(),
+        }
+    }
+}
+
+impl ToSql for SymbolVariant {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        match self {
+            SymbolVariant::LocalVariable => 0.to_sql(),
+            SymbolVariant::NamedExport => 1.to_sql(),
+            SymbolVariant::DefaultExport => 2.to_sql(),
         }
     }
 }
@@ -143,6 +204,39 @@ impl Symbol {
             name: row.get(3)?,
         })
     }
+
+    /// single thread only: last_insert_rowid()
+    pub fn create(
+        conn: &Connection,
+        module: &Module,
+        variant: SymbolVariant,
+        name: &str,
+    ) -> anyhow::Result<Self> {
+        conn.execute(
+            "INSERT INTO symbol (module_id, variant, name) VALUES (?1, ?2, ?3)",
+            params![module.id, variant, name],
+        )?;
+        let symbol = conn.query_row(
+            "SELECT * FROM symbol WHERE id=last_insert_rowid()",
+            (),
+            Self::from_row,
+        )?;
+        Ok(symbol)
+    }
+
+    pub fn retrieve(
+        conn: &Connection,
+        module: &Module,
+        variant: SymbolVariant,
+        name: &str,
+    ) -> anyhow::Result<Self> {
+        let symbol = conn.query_row(
+            "SELECT * FROM symbol WHERE (module_id, variant, name) = (?1, ?2, ?3)",
+            params![module.id, variant, name],
+            Self::from_row,
+        )?;
+        Ok(symbol)
+    }
 }
 
 // Join Table
@@ -173,6 +267,24 @@ impl SymbolDependency {
             symbol_id: row.get(1)?,
             depend_on_symbol_id: row.get(2)?,
         })
+    }
+
+    /// single thread only: last_insert_rowid()
+    pub fn create(
+        conn: &Connection,
+        current_symbol: &Symbol,
+        depend_on_symbol: &Symbol,
+    ) -> anyhow::Result<Self> {
+        conn.execute(
+            "INSERT INTO symbol_dependency (symbol_id, depend_on_symbol_id) VALUES (?1, ?2)",
+            params![current_symbol.id, depend_on_symbol.id],
+        )?;
+        let symbol_dependency = conn.query_row(
+            "SELECT * FROM symbol_dependency WHERE id=last_insert_rowid()",
+            (),
+            Self::from_row,
+        )?;
+        Ok(symbol_dependency)
     }
 }
 
