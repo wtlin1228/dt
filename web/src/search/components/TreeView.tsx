@@ -23,13 +23,15 @@ const StyledTreeView = styled(SimpleTreeView)({
 });
 
 const mapAllModuleSymbolToString = (
-  project_root: string,
   tracePaths: ModuleSymbol[][]
 ): string[][] => {
   return tracePaths.map((tracePath) =>
     tracePath.map(({ module_path, symbol_name }) => {
-      let shorterPath = module_path.slice(project_root.length);
-      return `${symbol_name}@${shorterPath}`;
+      if (module_path.startsWith("/")) {
+        return `${symbol_name}@${module_path.slice(1)}`;
+      } else {
+        return `${symbol_name}@${module_path}`;
+      }
     })
   );
 };
@@ -86,7 +88,7 @@ export const TreeView = React.memo(function TreeView({
   return (
     <Box
       sx={{
-        "overflow-x": "scroll",
+        overflowX: "scroll",
         pb: 2,
       }}
     >
@@ -103,10 +105,7 @@ export const TreeView = React.memo(function TreeView({
                   {Object.entries(traceTargets).map(([traceTarget, paths]) => (
                     <TracePathToTreeView
                       key={`${i18nKey} - ${url} - ${traceTarget}`}
-                      tracePaths={mapAllModuleSymbolToString(
-                        data.project_root,
-                        paths
-                      )}
+                      tracePaths={mapAllModuleSymbolToString(paths)}
                     />
                   ))}
                 </TreeItem>

@@ -7,12 +7,12 @@ version     = "0.1.0"
 
 
 [dependencies]
-anyhow = { workspace = true }
-clap   = { workspace = true }
+anyhow    = { workspace = true }
+clap      = { workspace = true }
+indicatif = { workspace = true }
 
 umya-spreadsheet = "1.2.3"
 dialoguer        = { version = "0.11.0", features = ["history"] }
-indicatif        = "0.17.8"
 console          = "0.15.8"
 rand             = "0.8.5"
 

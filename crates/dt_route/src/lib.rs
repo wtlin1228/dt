@@ -8,6 +8,56 @@ use swc_core::ecma::{
     visit::{Visit, VisitWith},
 };
 
+fn should_collect(symbol_dependency: &SymbolDependency) -> bool {
+    // filename should be "routes.js"
+    if !symbol_dependency.canonical_path.ends_with("/routes.js") {
+        return false;
+    }
+    // routes.js should have default export
+    if symbol_dependency.default_export.is_none() {
+        return false;
+    }
+    // routes.js should have anonumous default export
+    match symbol_dependency.default_export.as_ref().unwrap() {
+        dt_parser::types::ModuleExport::Local(exported_symbol) => {
+            if exported_symbol != SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT {
+                return false;
+            }
+        }
+        dt_parser::types::ModuleExport::ReExportFrom(_) => return false,
+    }
+    // default export should depend on some symbols
+    match symbol_dependency
+        .local_variable_table
+        .get(SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT)
+        .unwrap()
+        .depend_on
+    {
+        Some(_) => return true,
+        None => return false,
+    }
+}
+
+fn collect(
+    module_ast: &Module,
+    symbol_dependency: &SymbolDependency,
+) -> anyhow::Result<Vec<Route>> {
+    let mut route_visitor = RouteVisitor::new(symbol_dependency);
+    module_ast.visit_with(&mut route_visitor);
+    Ok(route_visitor.routes)
+}
+
+pub fn collect_route_dependency(
+    module_ast: &Module,
+    symbol_dependency: &SymbolDependency,
+) -> anyhow::Result<Vec<Route>> {
+    if should_collect(symbol_dependency) {
+        let routes = collect(module_ast, symbol_dependency)?;
+        return Ok(routes);
+    }
+    Ok(vec![])
+}
+
 #[derive(Debug)]
 pub struct SymbolToRoutes {
     // one symbol can be used in multiple routes
@@ -26,60 +76,21 @@ impl SymbolToRoutes {
         module_ast: &Module,
         symbol_dependency: &SymbolDependency,
     ) -> anyhow::Result<()> {
-        if Self::should_collect(symbol_dependency) {
-            let routes = Self::collect(module_ast, symbol_dependency)?;
-            self.aggregate(symbol_dependency.canonical_path.as_str(), routes);
+        if should_collect(symbol_dependency) {
+            let routes = collect(module_ast, symbol_dependency)?;
+            self.aggregate(symbol_dependency.canonical_path.as_str(), &routes);
         }
         Ok(())
     }
 
-    fn should_collect(symbol_dependency: &SymbolDependency) -> bool {
-        // filename should be "routes.js"
-        if !symbol_dependency.canonical_path.ends_with("/routes.js") {
-            return false;
-        }
-        // routes.js should have default export
-        if symbol_dependency.default_export.is_none() {
-            return false;
-        }
-        // routes.js should have anonumous default export
-        match symbol_dependency.default_export.as_ref().unwrap() {
-            dt_parser::types::ModuleExport::Local(exported_symbol) => {
-                if exported_symbol != SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT {
-                    return false;
-                }
-            }
-            dt_parser::types::ModuleExport::ReExportFrom(_) => return false,
-        }
-        // default export should depend on some symbols
-        match symbol_dependency
-            .local_variable_table
-            .get(SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT)
-            .unwrap()
-            .depend_on
-        {
-            Some(_) => return true,
-            None => return false,
-        }
-    }
-
-    fn collect(
-        module_ast: &Module,
-        symbol_dependency: &SymbolDependency,
-    ) -> anyhow::Result<Vec<Route>> {
-        let mut route_visitor = RouteVisitor::new(symbol_dependency);
-        module_ast.visit_with(&mut route_visitor);
-        Ok(route_visitor.routes)
-    }
-
-    fn aggregate(&mut self, module_path: &str, routes: Vec<Route>) {
+    fn aggregate(&mut self, module_path: &str, routes: &Vec<Route>) {
         let mut map = HashMap::new();
         for route in routes {
-            for symbol in route.depend_on {
-                if !map.contains_key(&symbol) {
-                    map.insert(symbol, vec![route.path.to_owned()]);
+            for symbol in route.depend_on.iter() {
+                if !map.contains_key(symbol) {
+                    map.insert(symbol.to_string(), vec![route.path.to_owned()]);
                 } else {
-                    map.get_mut(&symbol).unwrap().push(route.path.to_owned());
+                    map.get_mut(symbol).unwrap().push(route.path.to_owned());
                 }
             }
         }
@@ -88,9 +99,9 @@ impl SymbolToRoutes {
 }
 
 #[derive(Debug)]
-struct Route {
-    path: String,
-    depend_on: HashSet<String>,
+pub struct Route {
+    pub path: String,
+    pub depend_on: HashSet<String>,
 }
 
 #[derive(Debug)]

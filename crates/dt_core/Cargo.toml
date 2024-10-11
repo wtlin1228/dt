@@ -7,6 +7,7 @@ version     = "0.1.0"
 
 
 [dependencies]
+dt_database      = { version = "0.1.0", path = "../dt_database" }
 dt_graph         = { version = "0.1.0", path = "../dt_graph" }
 dt_i18n          = { version = "0.1.0", path = "../dt_i18n" }
 dt_parser        = { version = "0.1.0", path = "../dt_parser" }

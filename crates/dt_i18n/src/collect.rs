@@ -19,7 +19,7 @@ impl I18nToSymbol {
         module_ast: &Module,
     ) -> anyhow::Result<()> {
         let i18n_usage = core::collect_translation(module_ast)?;
-        for (symbol, i18n_keys) in i18n_usage {
+        for (symbol, i18n_keys) in i18n_usage.iter() {
             for i18n_key in i18n_keys.iter() {
                 if !self.table.contains_key(i18n_key) {
                     self.table.insert(i18n_key.to_owned(), HashMap::new());

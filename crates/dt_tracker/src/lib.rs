@@ -1,3 +1,5 @@
+pub mod db_version;
+
 use anyhow::{bail, Context};
 use dt_graph::used_by_graph::{UsedBy, UsedByGraph, UsedByOther, UsedByType};
 use serde::{Deserialize, Serialize};
