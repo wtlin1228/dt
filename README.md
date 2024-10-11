@@ -11,6 +11,47 @@ Currently, this tool is used internally in my own projects, so some assumptions 
 3. no string literal exports `export { myFunction as "my-function" };`
 4. no string literal imports `import { "string name" as alias } from "module-name";`
 
+## Design Decisions
+
+### Choosing `Symbol` as a Vertex
+
+A **symbol** can represent:
+
+1. A module-level local variable
+2. A named export
+3. A default export
+
+There is an **edge** from `v1` to `v2` if:
+
+1. Both `v1` and `v2` are local variable symbols, and `v2` is lexically contained within `v1`
+2. `v2` is imported from another module as `v1`
+3. `v1` exports or re-exports `v2`
+
+### Expanding Wildcard Imports and Re-Exports
+
+Expanding wildcard import and re-export statements simplifies parallel module parsing. Without expansion, any module containing such a statement would need to be parsed first, creating a bottleneck. Additionally, it's common in JavaScript projects to have numerous index.js files dedicated to re-exports, making this approach even more important for efficient processing.
+
+### Creating a Local Variable Symbol for Anonymous Default Exports
+
+This decision involves a trade-off: either introduce a new rule for edges or create a local variable symbol with a unique, impossible-to-collide name for the anonymous default export.
+
+### Depending on Namespace Imports Means Depending on All Named Exports
+
+```js
+import * as A from "a";
+
+// B depends on all named export symbols from A, not just `A.b.c.d.e`
+function B() {
+  return A.b.c.d.e;
+}
+```
+
+This presents a trade-off: either create a more fine-grained dependency graph or keep it simpler for now.
+
+### Duplicating Local Variable Symbols for Exports or Default Exports
+
+Duplicating local variable symbols when they are exported or re-exported as default will increase the size of the serialized output, but it avoids introducing new edge rules. This is another trade-off to consider.
+
 ## Problem Overview
 
 Imagine an application with two routes: `/home` and `/account`.
