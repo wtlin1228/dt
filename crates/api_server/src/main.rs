@@ -26,6 +26,8 @@ struct Info {
     exact_match: bool,
 }
 
+// Current implementation is mimick version of the trace with in-memory graph.
+// We can refactor it after the database feature gets validated.
 #[get("/search")]
 async fn search(
     data: web::Data<AppState>,

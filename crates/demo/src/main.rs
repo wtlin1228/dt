@@ -1,13 +1,8 @@
 use anyhow::Context;
 use clap::Parser;
 use console::style;
-use dialoguer::{theme::ColorfulTheme, BasicHistory, Confirm, Input, Select};
-use indicatif::{ProgressBar, ProgressStyle};
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
-use std::path::PathBuf;
-
 use demo::spreadsheet::write_to_spreadsheet;
+use dialoguer::{theme::ColorfulTheme, BasicHistory, Confirm, Input, Select};
 use dt_core::{
     graph::{depend_on_graph::DependOnGraph, used_by_graph::UsedByGraph},
     parser::{collect_symbol_dependency, Input as ModuleInput},
@@ -15,6 +10,9 @@ use dt_core::{
     scheduler::ParserCandidateScheduler,
     tracker::{DependencyTracker, TraceTarget},
 };
+use indicatif::{ProgressBar, ProgressStyle};
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use std::path::PathBuf;
 
 const SYMBOL_TYPE_SELECTIONS: [&str; 3] = ["Default Export", "Named Export", "Local Variable"];
 

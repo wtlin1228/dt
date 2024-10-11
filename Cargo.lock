@@ -720,6 +720,7 @@ dependencies = [
  "anyhow",
  "clap",
  "dt_core",
+ "indicatif",
  "serde_json",
 ]
 

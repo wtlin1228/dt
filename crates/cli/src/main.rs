@@ -15,6 +15,7 @@ use dt_core::{
     route::{collect_route_dependency, Route, SymbolToRoutes},
     scheduler::ParserCandidateScheduler,
 };
+use indicatif::{ProgressBar, ProgressStyle};
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
@@ -156,6 +157,13 @@ fn parse_and_export_project_to_database(
         .context("add translation to project")?;
 
     let mut scheduler = ParserCandidateScheduler::new(&project_root);
+    let bar = ProgressBar::new(scheduler.get_total_remaining_candidate_count() as u64);
+    bar.set_style(
+        ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        )?
+        .progress_chars("##-"),
+    );
     loop {
         match scheduler.get_one_candidate() {
             Some(c) => {
@@ -198,11 +206,12 @@ fn parse_and_export_project_to_database(
                     ))?;
 
                 scheduler.mark_candidate_as_parsed(c);
+                bar.inc(1);
             }
             None => break,
         }
     }
-
+    bar.finish_with_message("all modules parsed 🌲");
     Ok(())
 }
 
@@ -562,7 +571,8 @@ impl Project {
                             ))?;
                     }
                     Err(_) => {
-                        println!("try to add translation for symbol {}, but translation {} doesn't exist", symbol_name, key);
+                        // you can uncomment this to debug
+                        // println!("try to add translation for symbol {}, but translation {} doesn't exist", symbol_name, key);
                     }
                 }
             }

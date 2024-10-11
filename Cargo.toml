@@ -25,3 +25,4 @@ swc_core        = { version = "0.104.2", features = ["common", "ecma_ast", "ecma
 swc_ecma_parser = { version = "0.150.0", features = ["typescript"] }
 clap            = { version = "4.5", features = ["derive"] }
 rusqlite        = { version = "0.32.1", features = ["bundled"] }
+indicatif       = "0.17.8"

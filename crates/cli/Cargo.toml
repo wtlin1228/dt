@@ -10,5 +10,6 @@ version     = "0.1.0"
 anyhow     = { workspace = true }
 clap       = { workspace = true }
 serde_json = { workspace = true }
+indicatif  = { workspace = true }
 
 dt_core = { version = "0.1.0", path = "../dt_core" }
