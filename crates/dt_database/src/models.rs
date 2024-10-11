@@ -4,10 +4,11 @@ pub trait Model {
     fn table() -> String;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Project {
     pub id: usize,
     pub path: String,
+    pub name: String,
 }
 
 impl Model for Project {
@@ -15,7 +16,8 @@ impl Model for Project {
         "
         project (
             id   INTEGER PRIMARY KEY,
-            path TEXT NOT NULL
+            path TEXT NOT NULL,
+            name TEXT UNIQUE NOT NULL
         )
         "
         .to_string()
@@ -27,15 +29,28 @@ impl Project {
         Ok(Self {
             id: row.get(0)?,
             path: row.get(1)?,
+            name: row.get(2)?,
         })
     }
 
     /// single thread only: last_insert_rowid()
-    pub fn create(conn: &Connection, path: &str) -> anyhow::Result<Self> {
-        conn.execute("INSERT INTO project (path) VALUES (?1)", params![path])?;
+    pub fn create(conn: &Connection, path: &str, name: &str) -> anyhow::Result<Self> {
+        conn.execute(
+            "INSERT INTO project (path, name) VALUES (?1, ?2)",
+            params![path, name],
+        )?;
         let project = conn.query_row(
             "SELECT * FROM project WHERE id=last_insert_rowid()",
             (),
+            Self::from_row,
+        )?;
+        Ok(project)
+    }
+
+    pub fn retrieve_by_name(conn: &Connection, name: &str) -> anyhow::Result<Self> {
+        let project = conn.query_row(
+            "SELECT * FROM project WHERE (name) = (?1)",
+            params![name],
             Self::from_row,
         )?;
         Ok(project)
@@ -68,6 +83,18 @@ impl Project {
 
     pub fn get_translation(&self, conn: &Connection, key: &str) -> anyhow::Result<Translation> {
         Translation::retrieve(conn, self, key)
+    }
+
+    pub fn search_translation(
+        &self,
+        conn: &Connection,
+        search: &str,
+        exact_match: bool,
+    ) -> anyhow::Result<Vec<Translation>> {
+        match exact_match {
+            true => Translation::search_value_exact_match(conn, self, search),
+            false => Translation::search_value_contain(conn, self, search),
+        }
     }
 
     pub fn add_route(&self, conn: &Connection, path: &str) -> anyhow::Result<Route> {
@@ -113,6 +140,15 @@ impl Module {
         let module = conn.query_row(
             "SELECT * FROM module WHERE id=last_insert_rowid()",
             (),
+            Self::from_row,
+        )?;
+        Ok(module)
+    }
+
+    pub fn retrieve_by_id(conn: &Connection, module_id: usize) -> anyhow::Result<Self> {
+        let module = conn.query_row(
+            "SELECT * FROM module WHERE id = ?1",
+            params![module_id],
             Self::from_row,
         )?;
         Ok(module)
@@ -263,6 +299,38 @@ impl Symbol {
         )?;
         Ok(symbol)
     }
+
+    pub fn get_used_by(&self, conn: &Connection) -> anyhow::Result<Vec<Symbol>> {
+        let used_by: Vec<Symbol> = conn
+            .prepare(
+                "
+                SELECT s.*
+                FROM symbol s
+                JOIN symbol_dependency sd ON s.id = sd.symbol_id
+                WHERE sd.depend_on_symbol_id = ?1;
+                ",
+            )?
+            .query_map(params![self.id], Symbol::from_row)?
+            .map(|s| s.unwrap())
+            .collect();
+        Ok(used_by)
+    }
+
+    pub fn get_used_by_routes(&self, conn: &Connection) -> anyhow::Result<Vec<Route>> {
+        let used_by_routes: Vec<Route> = conn
+            .prepare(
+                "
+                SELECT r.*
+                FROM route r
+                JOIN route_usage ru ON r.id = ru.route_id
+                WHERE ru.symbol_id = ?1;
+                ",
+            )?
+            .query_map(params![self.id], Route::from_row)?
+            .map(|s| s.unwrap())
+            .collect();
+        Ok(used_by_routes)
+    }
 }
 
 // Join Table
@@ -372,6 +440,55 @@ impl Translation {
             Self::from_row,
         )?;
         Ok(translation)
+    }
+
+    pub fn search_value_exact_match(
+        conn: &Connection,
+        project: &Project,
+        search: &str,
+    ) -> anyhow::Result<Vec<Self>> {
+        let translations: Vec<Self> = conn
+            .prepare("SELECT * FROM translation WHERE (project_id, value) = (?1, ?2)")?
+            .query_map(params![project.id, search], Self::from_row)?
+            .map(|s| s.unwrap())
+            .collect();
+        Ok(translations)
+    }
+
+    pub fn search_value_contain(
+        conn: &Connection,
+        project: &Project,
+        search: &str,
+    ) -> anyhow::Result<Vec<Self>> {
+        let translations: Vec<Self> = conn
+            .prepare(
+                "
+                SELECT * 
+                FROM translation 
+                WHERE project_id = ?1
+                AND value LIKE '%' || ?2 || '%'
+                ",
+            )?
+            .query_map(params![project.id, search], Self::from_row)?
+            .map(|s| s.unwrap())
+            .collect();
+        Ok(translations)
+    }
+
+    pub fn get_used_by(&self, conn: &Connection) -> anyhow::Result<Vec<Symbol>> {
+        let used_by: Vec<Symbol> = conn
+            .prepare(
+                "
+                SELECT s.*
+                FROM symbol s
+                JOIN translation_usage tu ON s.id = tu.symbol_id
+                WHERE tu.translation_id = ?1;
+                ",
+            )?
+            .query_map(params![self.id], Symbol::from_row)?
+            .map(|s| s.unwrap())
+            .collect();
+        Ok(used_by)
     }
 }
 

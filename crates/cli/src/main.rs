@@ -46,10 +46,10 @@ struct Project {
 }
 
 impl Project {
-    pub fn new(project_root: &str, db_path: &str) -> anyhow::Result<Self> {
+    pub fn new(project_name: &str, project_root: &str, db_path: &str) -> anyhow::Result<Self> {
         let db = SqliteDb::open(db_path)?;
         db.create_tables()?;
-        let project = models::Project::create(&db.conn, project_root)?;
+        let project = models::Project::create(&db.conn, project_root, project_name)?;
         Ok(Self {
             db,
             project_root: project_root.to_owned(),
@@ -345,7 +345,7 @@ impl Project {
         &self,
         symbol_dependency: &SymbolDependency,
     ) -> anyhow::Result<models::Module> {
-        let module = self.project.add_module(
+        let module = self.project.get_or_create_module(
             &self.db.conn,
             &self.remove_prefix(&symbol_dependency.canonical_path),
         )?;
@@ -429,7 +429,7 @@ impl Project {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let project_root = PathBuf::from(&cli.input).to_canonical_string()?;
-    let project = Project::new(&project_root, "./database/1010.db3")?;
+    let project = Project::new("kirby", &project_root, "./database/1010.db3")?;
     let translation_file = File::open(&cli.translation_path)?;
     let translation_json_reader = BufReader::new(translation_file);
     let mut scheduler = ParserCandidateScheduler::new(&project_root);

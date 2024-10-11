@@ -1098,6 +1098,7 @@ name = "dt_tracker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dt_database",
  "dt_graph",
  "dt_parser",
  "serde",
