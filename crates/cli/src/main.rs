@@ -553,14 +553,18 @@ impl Project {
                     symbol_name,
                 ))?;
             for key in i18n_keys.iter() {
-                let translation =
-                    self.project
-                        .get_translation(&self.db.conn, key)
-                        .context(format!(
-                        "try to add translation for symbol {}, but translation {} doesn't exist",
-                        symbol_name, key
-                    ))?;
-                models::TranslationUsage::create(&self.db.conn, &translation, &symbol)?;
+                match self.project.get_translation(&self.db.conn, key) {
+                    Ok(translation) => {
+                        models::TranslationUsage::create(&self.db.conn, &translation, &symbol)
+                            .context(format!(
+                                "relate symbol {} to translation {}",
+                                symbol_name, key
+                            ))?;
+                    }
+                    Err(_) => {
+                        println!("try to add translation for symbol {}, but translation {} doesn't exist", symbol_name, key);
+                    }
+                }
             }
         }
         Ok(())
