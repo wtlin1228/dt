@@ -1,8 +1,9 @@
 use anyhow::Context;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use dt_core::{
     database::{models, Database, SqliteDb},
-    i18n::collect_translation,
+    graph::{depend_on_graph::DependOnGraph, used_by_graph::UsedByGraph},
+    i18n::{collect_translation, I18nToSymbol},
     parser::{
         anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
         collect_symbol_dependency,
@@ -10,42 +11,124 @@ use dt_core::{
         Input,
     },
     path_resolver::{PathResolver, ToCanonicalString},
-    route::{collect_route_dependency, Route},
+    portable::Portable,
+    route::{collect_route_dependency, Route, SymbolToRoutes},
     scheduler::ParserCandidateScheduler,
 };
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
-    io::BufReader,
+    io::{BufReader, Write},
     path::PathBuf,
 };
 
 #[derive(Parser)]
 #[command(version, about = "Parse a project and serialize its output", long_about = None)]
 struct Cli {
-    /// Input path
-    #[arg(short)]
-    input: String,
+    #[command(subcommand)]
+    command: Command,
+}
 
-    /// translation.json path
-    #[arg(short)]
-    translation_path: String,
+#[derive(Subcommand)]
+enum Command {
+    /// Parse and export the project in portable format
+    Portable {
+        /// Input path
+        #[arg(short)]
+        input: String,
 
-    /// Output path
-    #[arg(short)]
-    output: String,
+        /// translation.json path
+        #[arg(short)]
+        translation_path: String,
+
+        /// Output path
+        #[arg(short)]
+        output: String,
+    },
+
+    /// Parse and export the project in database format
+    Database {
+        /// Input path
+        #[arg(short)]
+        input: String,
+
+        /// translation.json path
+        #[arg(short)]
+        translation_path: String,
+
+        /// Output path
+        #[arg(short)]
+        output: String,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    match Cli::parse().command {
+        Command::Portable {
+            input,
+            translation_path,
+            output,
+        } => {
+            parse_and_export_project_to_portable(&input, &output, &translation_path)
+                .context("parse and export project to portable")?;
+        }
+        Command::Database {
+            input,
+            translation_path,
+            output,
+        } => {
+            parse_and_export_project_to_database(&input, &output, &translation_path)
+                .context("parse and export project to database")?;
+        }
+    }
+    Ok(())
+}
 
-    parse_export_project_to_database(&cli.input, &cli.output, &cli.translation_path)
-        .context("parse and export project to database")?;
+fn parse_and_export_project_to_portable(
+    project_root: &str,
+    output_portable_path: &str,
+    translation_file_path: &str,
+) -> anyhow::Result<()> {
+    let project_root = PathBuf::from(project_root).to_canonical_string()?;
+    let translation_json = File::open(&translation_file_path)?;
+    let translation_json_reader = BufReader::new(translation_json);
+
+    let mut scheduler = ParserCandidateScheduler::new(&project_root);
+    let mut depend_on_graph = DependOnGraph::new(&project_root);
+    let mut symbol_to_route = SymbolToRoutes::new();
+    let mut i18n_to_symbol = I18nToSymbol::new();
+    loop {
+        match scheduler.get_one_candidate() {
+            Some(c) => {
+                let module_src = c.to_str().context(format!("to_str() failed: {:?}", c))?;
+                let module_ast = Input::Path(module_src).get_module_ast()?;
+                let symbol_dependency = collect_symbol_dependency(&module_ast, module_src)?;
+                i18n_to_symbol.collect_i18n_usage(module_src, &module_ast)?;
+                symbol_to_route.collect_route_dependency(&module_ast, &symbol_dependency)?;
+
+                depend_on_graph.add_symbol_dependency(symbol_dependency)?;
+                scheduler.mark_candidate_as_parsed(c);
+            }
+            None => break,
+        }
+    }
+
+    let portable = Portable::new(
+        project_root.to_owned(),
+        serde_json::from_reader(translation_json_reader)?,
+        i18n_to_symbol.table,
+        symbol_to_route.table,
+        UsedByGraph::from(&depend_on_graph),
+    );
+
+    let serialized = portable.export()?;
+    let mut file = File::create(&output_portable_path)?;
+    file.write_all(serialized.as_bytes())?;
 
     Ok(())
 }
 
-fn parse_export_project_to_database(
+fn parse_and_export_project_to_database(
     project_root: &str,
     output_database_path: &str,
     translation_file_path: &str,
