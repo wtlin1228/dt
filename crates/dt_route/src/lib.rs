@@ -7,6 +7,56 @@ use swc_core::ecma::{
     visit::{Visit, VisitWith},
 };
 
+fn should_collect(symbol_dependency: &SymbolDependency) -> bool {
+    // filename should be "routes.js"
+    if !symbol_dependency.canonical_path.ends_with("/routes.js") {
+        return false;
+    }
+    // routes.js should have default export
+    if symbol_dependency.default_export.is_none() {
+        return false;
+    }
+    // routes.js should have anonumous default export
+    match symbol_dependency.default_export.as_ref().unwrap() {
+        dt_parser::types::ModuleExport::Local(exported_symbol) => {
+            if exported_symbol != SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT {
+                return false;
+            }
+        }
+        dt_parser::types::ModuleExport::ReExportFrom(_) => return false,
+    }
+    // default export should depend on some symbols
+    match symbol_dependency
+        .local_variable_table
+        .get(SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT)
+        .unwrap()
+        .depend_on
+    {
+        Some(_) => return true,
+        None => return false,
+    }
+}
+
+fn collect(
+    module_ast: &Module,
+    symbol_dependency: &SymbolDependency,
+) -> anyhow::Result<Vec<Route>> {
+    let mut route_visitor = RouteVisitor::new(symbol_dependency);
+    module_ast.visit_with(&mut route_visitor);
+    Ok(route_visitor.routes)
+}
+
+pub fn collect_route_dependency(
+    module_ast: &Module,
+    symbol_dependency: &SymbolDependency,
+) -> anyhow::Result<Vec<Route>> {
+    if should_collect(symbol_dependency) {
+        let routes = collect(module_ast, symbol_dependency)?;
+        return Ok(routes);
+    }
+    Ok(vec![])
+}
+
 #[derive(Debug)]
 pub struct SymbolToRoutes {
     // one symbol can be used in multiple routes
@@ -24,52 +74,12 @@ impl SymbolToRoutes {
         &mut self,
         module_ast: &Module,
         symbol_dependency: &SymbolDependency,
-    ) -> anyhow::Result<Vec<Route>> {
-        if Self::should_collect(symbol_dependency) {
-            let routes = Self::collect(module_ast, symbol_dependency)?;
+    ) -> anyhow::Result<()> {
+        if should_collect(symbol_dependency) {
+            let routes = collect(module_ast, symbol_dependency)?;
             self.aggregate(symbol_dependency.canonical_path.as_str(), &routes);
-            return Ok(routes);
         }
-        Ok(vec![])
-    }
-
-    fn should_collect(symbol_dependency: &SymbolDependency) -> bool {
-        // filename should be "routes.js"
-        if !symbol_dependency.canonical_path.ends_with("/routes.js") {
-            return false;
-        }
-        // routes.js should have default export
-        if symbol_dependency.default_export.is_none() {
-            return false;
-        }
-        // routes.js should have anonumous default export
-        match symbol_dependency.default_export.as_ref().unwrap() {
-            dt_parser::types::ModuleExport::Local(exported_symbol) => {
-                if exported_symbol != SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT {
-                    return false;
-                }
-            }
-            dt_parser::types::ModuleExport::ReExportFrom(_) => return false,
-        }
-        // default export should depend on some symbols
-        match symbol_dependency
-            .local_variable_table
-            .get(SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT)
-            .unwrap()
-            .depend_on
-        {
-            Some(_) => return true,
-            None => return false,
-        }
-    }
-
-    fn collect(
-        module_ast: &Module,
-        symbol_dependency: &SymbolDependency,
-    ) -> anyhow::Result<Vec<Route>> {
-        let mut route_visitor = RouteVisitor::new(symbol_dependency);
-        module_ast.visit_with(&mut route_visitor);
-        Ok(route_visitor.routes)
+        Ok(())
     }
 
     fn aggregate(&mut self, module_path: &str, routes: &Vec<Route>) {

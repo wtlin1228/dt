@@ -17,7 +17,7 @@ impl I18nToSymbol {
         &mut self,
         module_path: &str,
         module_ast: &Module,
-    ) -> anyhow::Result<HashMap<String, HashSet<String>>> {
+    ) -> anyhow::Result<()> {
         let i18n_usage = core::collect_translation(module_ast)?;
         for (symbol, i18n_keys) in i18n_usage.iter() {
             for i18n_key in i18n_keys.iter() {
@@ -38,6 +38,6 @@ impl I18nToSymbol {
                     .insert(symbol.to_owned());
             }
         }
-        Ok(i18n_usage)
+        Ok(())
     }
 }

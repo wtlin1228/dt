@@ -2,8 +2,7 @@ use anyhow::Context;
 use clap::Parser;
 use dt_core::{
     database::{models, Database, SqliteDb},
-    graph::{depend_on_graph::DependOnGraph, used_by_graph::UsedByGraph},
-    i18n::I18nToSymbol,
+    i18n::collect_translation,
     parser::{
         anonymous_default_export::SYMBOL_NAME_FOR_ANONYMOUS_DEFAULT_EXPORT,
         collect_symbol_dependency,
@@ -11,14 +10,13 @@ use dt_core::{
         Input,
     },
     path_resolver::{PathResolver, ToCanonicalString},
-    portable::Portable,
-    route::{Route, SymbolToRoutes},
+    route::{collect_route_dependency, Route},
     scheduler::ParserCandidateScheduler,
 };
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
-    io::{prelude::*, BufReader},
+    io::BufReader,
     path::PathBuf,
 };
 
@@ -36,6 +34,93 @@ struct Cli {
     /// Output path
     #[arg(short)]
     output: String,
+}
+
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+
+    parse_export_project_to_database(&cli.input, &cli.output, &cli.translation_path)
+        .context("parse and export project to database")?;
+
+    Ok(())
+}
+
+fn parse_export_project_to_database(
+    project_root: &str,
+    output_database_path: &str,
+    translation_file_path: &str,
+) -> anyhow::Result<()> {
+    let project_root = PathBuf::from(project_root).to_canonical_string()?;
+    // project name "default_project" can be different in feature "cross-project tracing"
+    let project =
+        Project::new("default_project", &project_root, output_database_path).context(format!(
+            "ready to a emit the project to database, project: {}, database: {}",
+            project_root, output_database_path
+        ))?;
+
+    let translation_file = File::open(translation_file_path).context(format!(
+        "open translation file, path: {}",
+        translation_file_path
+    ))?;
+    let translation_json_reader = BufReader::new(translation_file);
+    let translation_json: HashMap<String, String> =
+        serde_json::from_reader(translation_json_reader).context(format!(
+            "deserialize translation file, path: {}",
+            translation_file_path
+        ))?;
+    project
+        .add_translation(&translation_json)
+        .context("add translation to project")?;
+
+    let mut scheduler = ParserCandidateScheduler::new(&project_root);
+    loop {
+        match scheduler.get_one_candidate() {
+            Some(c) => {
+                let module_src = c
+                    .to_str()
+                    .context(format!("get module_src, path_buf: {:?}", c))?;
+                let module_ast = Input::Path(module_src)
+                    .get_module_ast()
+                    .context(format!("get module ast, module_src: {}", module_src))?;
+
+                let symbol_dependency = collect_symbol_dependency(&module_ast, module_src)
+                    .context(format!(
+                        "collect symbol dependency for module: {}",
+                        &module_src
+                    ))?;
+                let module = project
+                    .add_module(&symbol_dependency)
+                    .context(format!(
+                        "add symbol dependency of module {} to project",
+                        symbol_dependency.canonical_path
+                    ))
+                    .context(format!("add module {} to project", module_src))?;
+
+                let i18n_usage = collect_translation(&module_ast)
+                    .context(format!("collect i18n usage for module: {}", &module_src))?;
+                project
+                    .add_i18n_usage(&module, &i18n_usage)
+                    .context(format!(
+                        "add i18n usage of module {} to project",
+                        module_src
+                    ))?;
+
+                let route_usage = collect_route_dependency(&module_ast, &symbol_dependency)
+                    .context(format!("collect route usage for module: {}", &module_src))?;
+                project
+                    .add_route_usage(&module, &route_usage)
+                    .context(format!(
+                        "add route usage of module {} to project",
+                        module_src
+                    ))?;
+
+                scheduler.mark_candidate_as_parsed(c);
+            }
+            None => break,
+        }
+    }
+
+    Ok(())
 }
 
 struct Project {
@@ -424,73 +509,4 @@ impl Project {
         }
         Ok(())
     }
-}
-
-fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
-    let project_root = PathBuf::from(&cli.input).to_canonical_string()?;
-    let project = Project::new("kirby", &project_root, "./database/1010.db3")?;
-    let translation_file = File::open(&cli.translation_path)?;
-    let translation_json_reader = BufReader::new(translation_file);
-    let mut scheduler = ParserCandidateScheduler::new(&project_root);
-    let mut depend_on_graph = DependOnGraph::new(&project_root);
-    let mut symbol_to_route = SymbolToRoutes::new();
-    let mut i18n_to_symbol = I18nToSymbol::new();
-
-    let translation_json: HashMap<String, String> =
-        serde_json::from_reader(translation_json_reader)?;
-    project
-        .add_translation(&translation_json)
-        .context("add translation to project")?;
-
-    loop {
-        match scheduler.get_one_candidate() {
-            Some(c) => {
-                let module_src = c.to_str().context(format!("to_str() failed: {:?}", c))?;
-                let module_ast = Input::Path(module_src).get_module_ast()?;
-                let symbol_dependency = collect_symbol_dependency(&module_ast, module_src)?;
-                let i18n_usage = i18n_to_symbol.collect_i18n_usage(module_src, &module_ast)?;
-                let route_usage =
-                    symbol_to_route.collect_route_dependency(&module_ast, &symbol_dependency)?;
-
-                let module = project
-                    .add_module(&symbol_dependency)
-                    .context(format!(
-                        "add module {} to project",
-                        symbol_dependency.canonical_path
-                    ))
-                    .context(format!("add module {} to project", module_src))?;
-                project
-                    .add_i18n_usage(&module, &i18n_usage)
-                    .context(format!(
-                        "add i18n usage of module {} to project",
-                        module_src
-                    ))?;
-                project
-                    .add_route_usage(&module, &route_usage)
-                    .context(format!(
-                        "add route usage of module {} to project",
-                        module_src
-                    ))?;
-
-                depend_on_graph.add_symbol_dependency(symbol_dependency)?;
-                scheduler.mark_candidate_as_parsed(c);
-            }
-            None => break,
-        }
-    }
-
-    let portable = Portable::new(
-        project_root.to_owned(),
-        translation_json,
-        i18n_to_symbol.table,
-        symbol_to_route.table,
-        UsedByGraph::from(&depend_on_graph),
-    );
-
-    let serialized = portable.export()?;
-    let mut file = File::create(&cli.output)?;
-    file.write_all(serialized.as_bytes())?;
-
-    Ok(())
 }
