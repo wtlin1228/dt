@@ -2,7 +2,7 @@
 authors     = ["Leo Lin <wtlin1228@gmail.com>"]
 description = "run the tracker and provide APIs"
 edition     = "2021"
-name        = "api_server"
+name        = "api_server_portable"
 version     = "0.1.0"
 
 

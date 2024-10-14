@@ -371,7 +371,17 @@ version = "0.1.0"
 dependencies = [
  "actix-cors",
  "actix-web",
- "anyhow",
+ "clap",
+ "dt_core",
+ "serde",
+]
+
+[[package]]
+name = "api_server_portable"
+version = "0.1.0"
+dependencies = [
+ "actix-cors",
+ "actix-web",
  "clap",
  "dt_core",
  "serde",
