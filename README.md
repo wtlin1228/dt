@@ -27,11 +27,38 @@ There is an **edge** from `v1` to `v2` if:
 2. `v2` is imported from another module as `v1`
 3. `v1` exports or re-exports `v2`
 
-### Expanding Wildcard Imports and Re-Exports
+### Expanding Wildcard Re-Exports
 
-Expanding wildcard import and re-export statements simplifies parallel module parsing. Without expansion, any module containing such a statement would need to be parsed first, creating a bottleneck. Additionally, it's common in JavaScript projects to have numerous index.js files dedicated to re-exports, making this approach even more important for efficient processing.
+```js
+// assume a module named exports 'Foo', 'Bar'
+// then this wildcard re-export statement gets turned into
+// export { Foo, Bar } from 'a'
+export * from "a";
+```
+
+Expanding wildcard re-export statements simplifies parallel module parsing. Without expansion, any module containing such a statement would need to be parsed first, creating a bottleneck. Additionally, it's common in JavaScript projects to have numerous index.js files dedicated to re-exports, making this approach even more important for efficient processing.
+
+### Duplicating Local Variable Symbols for Exports or Default Exports
+
+```js
+// one named export symbol + one local variable symbol named "A"
+export const A = "A";
+
+// one default export symbol + one local variable symbol named "B"
+export default B = "B";
+```
+
+Duplicating local variable symbols when they are exported or re-exported as default will increase the size of the serialized output, but it avoids introducing new edge rules. This is another trade-off to consider.
 
 ### Creating a Local Variable Symbol for Anonymous Default Exports
+
+```js
+// one default export symbol + one anonymous local variable symbol
+export default () => {}
+export default function () {}
+export default function* () {}
+export default class {}
+```
 
 This decision involves a trade-off: either introduce a new rule for edges or create a local variable symbol with a unique, impossible-to-collide name for the anonymous default export.
 
@@ -47,10 +74,6 @@ function B() {
 ```
 
 This presents a trade-off: either create a more fine-grained dependency graph or keep it simpler for now.
-
-### Duplicating Local Variable Symbols for Exports or Default Exports
-
-Duplicating local variable symbols when they are exported or re-exported as default will increase the size of the serialized output, but it avoids introducing new edge rules. This is another trade-off to consider.
 
 ## Problem Overview
 
