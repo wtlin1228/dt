@@ -11,6 +11,8 @@ Currently, this tool is used internally in my own projects, so some assumptions 
 3. no string literal exports `export { myFunction as "my-function" };`
 4. no string literal imports `import { "string name" as alias } from "module-name";`
 
+See also [Why I Built a Tool to Trace Symbol Dependencies](https://leonerd.blog/posts/why-i-built-a-tool-to-trace-symbol-dependencies/)
+
 ## Design Decisions
 
 ### Choosing `Symbol` as a Vertex
